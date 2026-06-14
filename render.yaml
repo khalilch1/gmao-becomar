@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: gmao-becomar-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: CORS_ORIGIN
+        value: https://gmao-becomar.vercel.app

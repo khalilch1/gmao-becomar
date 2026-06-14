@@ -4,7 +4,7 @@ import {
   History, Boxes, TrendingUp, TrendingDown,
 } from 'lucide-react';
 import { api, dh, num } from '../App.jsx';
-import { Loading, Pill, KpiCard, useFetch } from '../components/Common.jsx';
+import { Loading, Pill, KpiCard, useFetch, FilterBar } from '../components/Common.jsx';
 
 const MOTIFS = {
   Entrée: ['Réception fournisseur', 'Retour atelier', 'Ajustement inventaire', 'Régularisation'],
@@ -17,21 +17,30 @@ export default function StockMovements() {
   const { data: parts } = useFetch(api.parts);
   const [movements, setMovements] = useState(null);
   const [showNewMove, setShowNewMove] = useState(false);
-  const [filterRef, setFilterRef] = useState('');
+  const [filters, setFilters] = useState({ ref: '', type: 'Tous', q: '', dateFrom: '', dateTo: '' });
+  const setF = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
 
   const load = () => api.movements().then(setMovements);
-
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   if (!parts || !movements) return <Loading />;
 
   const totalIn = movements.filter((m) => m.type === 'Entrée').reduce((s, m) => s + m.qty, 0);
   const totalOut = movements.filter((m) => m.type === 'Sortie').reduce((s, m) => s + m.qty, 0);
-  const filtered = filterRef
-    ? movements.filter((m) => m.ref === filterRef)
-    : movements.slice(0, 50);
+
+  const partOptions = ['Tous', ...parts.map((p) => p.ref)];
+  const filtered = movements.filter((m) => {
+    if (filters.ref && filters.ref !== 'Tous' && m.ref !== filters.ref) return false;
+    if (filters.type !== 'Tous' && m.type !== filters.type) return false;
+    if (filters.dateFrom && m.date < filters.dateFrom) return false;
+    if (filters.dateTo && m.date > filters.dateTo) return false;
+    if (filters.q) {
+      const q = filters.q.toLowerCase();
+      const part = parts.find((p) => p.ref === m.ref);
+      return m.ref.toLowerCase().includes(q) || m.motif?.toLowerCase().includes(q) || part?.name?.toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   return (
     <div className="page">
@@ -93,23 +102,14 @@ export default function StockMovements() {
           <span className="card-hint">{movements.length} mouvements enregistrés</span>
         </div>
 
-        <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label>Filtrer par pièce</label>
-            <select
-              className="select"
-              value={filterRef}
-              onChange={(e) => setFilterRef(e.target.value)}
-            >
-              <option value="">Toutes les pièces</option>
-              {parts.map((p) => (
-                <option key={p.ref} value={p.ref}>
-                  {p.ref} · {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <FilterBar
+          filters={[
+            { key: 'q', label: 'Rechercher (pièce, motif…)', type: 'text' },
+            { key: 'ref', label: 'Pièce', type: 'select', options: partOptions },
+            { key: 'type', label: 'Type', type: 'select', options: ['Tous', 'Entrée', 'Sortie'] },
+          ]}
+          values={filters} onChange={setF} total={movements.length} shown={filtered.length}
+        />
 
         <div className="table-wrap">
           <table>
@@ -126,14 +126,14 @@ export default function StockMovements() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {filtered.slice(0, 100).length === 0 ? (
                 <tr>
                   <td colSpan="8" className="muted" style={{ textAlign: 'center', padding: 20 }}>
                     Aucun mouvement enregistré
                   </td>
                 </tr>
               ) : (
-                filtered.map((m) => {
+                filtered.slice(0, 100).map((m) => {
                   const part = parts.find((p) => p.ref === m.ref);
                   const isIn = m.type === 'Entrée';
                   return (

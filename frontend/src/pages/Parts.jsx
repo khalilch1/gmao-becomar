@@ -4,7 +4,7 @@ import {
   Pencil, Lock, X, ArrowDownToLine, ArrowUpFromLine, Plus, ArrowRightLeft,
 } from 'lucide-react';
 import { api, dh, num } from '../App.jsx';
-import { Loading, Pill, KpiCard } from '../components/Common.jsx';
+import { Loading, Pill, KpiCard, FilterBar } from '../components/Common.jsx';
 
 const MOTIFS = {
   Entrée: ['Réception fournisseur', 'Retour atelier', 'Ajustement inventaire', 'Régularisation'],
@@ -25,10 +25,24 @@ export default function Parts() {
   };
   useEffect(load, []);
 
+  const [filters, setFilters] = useState({ q: '', category: 'Tous', lowStock: false });
+  const setF = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
+
   if (!parts) return <Loading />;
 
   const stockValue = parts.reduce((s, p) => s + p.stockValue, 0);
   const lowCount = parts.filter((p) => p.lowStock).length;
+
+  const CATEGORIES_PARTS = ['Tous', 'Roulement', 'Courroie', 'Joint / Étanchéité', 'Électrique', 'Hydraulique', 'Instrumentation', 'Consommable', 'Autre'];
+  const filteredParts = parts.filter((p) => {
+    if (filters.lowStock && !p.lowStock) return false;
+    if (filters.category !== 'Tous' && p.category !== filters.category) return false;
+    if (filters.q) {
+      const q = filters.q.toLowerCase();
+      return p.ref.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   return (
     <div className="page">
@@ -51,6 +65,14 @@ export default function Parts() {
             <Plus size={16} /> Créer une pièce
           </button>
         </div>
+        <FilterBar
+          filters={[
+            { key: 'q', label: 'Rechercher (référence, désignation…)', type: 'text' },
+            { key: 'category', label: 'Catégorie', type: 'select', options: CATEGORIES_PARTS },
+            { key: 'lowStock', label: '⚠ Stock bas uniquement', type: 'toggle' },
+          ]}
+          values={filters} onChange={setF} total={parts.length} shown={filteredParts.length}
+        />
         <div className="table-wrap">
           <table>
             <thead>
@@ -62,7 +84,7 @@ export default function Parts() {
               </tr>
             </thead>
             <tbody>
-              {parts.map((p) => (
+              {filteredParts.map((p) => (
                 <tr key={p.ref}>
                   <td className="cell-code">{p.ref}</td>
                   <td className="cell-strong">{p.name}</td>

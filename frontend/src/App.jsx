@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
-  LayoutDashboard, Wrench, Cpu, Package, BarChart3, Factory, Clock, ArrowRightLeft,
+  LayoutDashboard, Wrench, Cpu, Package, BarChart3, Factory, Clock, ArrowRightLeft, Users,
+  TrendingUp, Boxes, FlaskConical,
 } from 'lucide-react';
 import Dashboard from './pages/Dashboard.jsx';
 import WorkOrders from './pages/WorkOrders.jsx';
@@ -9,6 +10,10 @@ import Parts from './pages/Parts.jsx';
 import Analytics from './pages/Analytics.jsx';
 import TimeTracking from './pages/TimeTracking.jsx';
 import StockMovements from './pages/StockMovements.jsx';
+import Collaborateurs from './pages/Collaborateurs.jsx';
+import Articles from './pages/Articles.jsx';
+import MatieresPremieres from './pages/MatieresPremieres.jsx';
+import Production from './pages/Production.jsx';
 import { api } from './api.js';
 
 export { api };
@@ -30,7 +35,13 @@ const NAV = [
 
 export default function App() {
   const [page, setPage] = useState('dashboard');
-  const current = NAV.find((n) => n.id === page);
+  const SETTINGS_PAGES = {
+    collaborateurs: { label: 'Collaborateurs', sub: 'Personnel affectable aux OT' },
+    articles: { label: 'Articles (Produits finis)', sub: 'Catalogue et stock produits finis' },
+    matieres: { label: 'Matières premières', sub: 'Gestion stock matières premières' },
+    production: { label: 'Production & TRS', sub: 'Saisie production et calcul du Taux de Rendement Synthétique' },
+  };
+  const current = NAV.find((n) => n.id === page) || SETTINGS_PAGES[page] || { label: '', sub: '' };
 
   return (
     <div className="app">
@@ -45,6 +56,7 @@ export default function App() {
           </div>
         </div>
 
+        <div className="sidebar-scroll">
         <div className="nav-label">Pilotage</div>
         {NAV.map((n) => {
           const Icon = n.icon;
@@ -59,6 +71,26 @@ export default function App() {
             </button>
           );
         })}
+        <div className="nav-label" style={{ marginTop: 12 }}>Production</div>
+        <button className={`nav-item ${page === 'production' ? 'active' : ''}`} onClick={() => setPage('production')}>
+          <TrendingUp strokeWidth={2.1} />
+          Production & TRS
+        </button>
+
+        <div className="nav-label" style={{ marginTop: 12 }}>Paramétrage</div>
+        <button className={`nav-item ${page === 'collaborateurs' ? 'active' : ''}`} onClick={() => setPage('collaborateurs')}>
+          <Users strokeWidth={2.1} />
+          Collaborateurs
+        </button>
+        <button className={`nav-item ${page === 'articles' ? 'active' : ''}`} onClick={() => setPage('articles')}>
+          <Boxes strokeWidth={2.1} />
+          Articles (Produits finis)
+        </button>
+        <button className={`nav-item ${page === 'matieres' ? 'active' : ''}`} onClick={() => setPage('matieres')}>
+          <FlaskConical strokeWidth={2.1} />
+          Matières premières
+        </button>
+        </div>
 
         <div className="sidebar-footer">
           <div className="user-chip">
@@ -92,6 +124,10 @@ export default function App() {
           {page === 'movements' && <StockMovements />}
           {page === 'analytics' && <Analytics />}
           {page === 'timetracking' && <TimeTracking />}
+          {page === 'collaborateurs' && <Collaborateurs />}
+          {page === 'articles' && <Articles />}
+          {page === 'matieres' && <MatieresPremieres />}
+          {page === 'production' && <Production />}
         </main>
       </div>
     </div>

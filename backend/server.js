@@ -8,15 +8,28 @@ const {
   units,
   machines,
   parts,
+  collaborateurs: seedCollaborateurs,
   workOrders,
   production,
   valorizeWorkOrder,
   seedMovements,
   initialStock,
+  articles: seedArticles,
+  matieres: seedMatieres,
+  productions: seedProductions,
+  enrichProduction,
+  calcTRS,
+  seedArticlesMovements,
+  initialArticlesStock,
+  seedMatieresMovements,
+  initialMatieresStock,
 } = require('./data');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
+  credentials: true,
+}));
 app.use(express.json());
 
 const PORT = process.env.PORT || 4000;
@@ -24,6 +37,30 @@ const PORT = process.env.PORT || 4000;
 // État mutable en mémoire (les OT créés s'ajoutent ici)
 let orders = [...workOrders];
 let nextId = 2418;
+
+// Collaborateurs (paramétrage)
+let collaborateurs = seedCollaborateurs.map((c) => ({ ...c }));
+let colSeq = collaborateurs.length + 1;
+
+// Articles (produits finis)
+let articlesMeta = seedArticles.map((a) => ({ ...a }));
+let articlesStock = { ...initialArticlesStock };
+let artMovements = [...seedArticlesMovements];
+let artMvSeq = artMovements.length;
+
+// Matières premières
+let matieresMeta = seedMatieres.map((m) => ({ ...m }));
+let matieresStock = { ...initialMatieresStock };
+let matMovements = [...seedMatieresMovements];
+let matMvSeq = matMovements.length;
+
+// Productions
+let productionsList = [...seedProductions];
+let prodSeq = productionsList.length + 1;
+
+const prodId = () => `PROD-${String(prodSeq++).padStart(4, '0')}`;
+const artMvId = () => `AM-${String(++artMvSeq).padStart(4, '0')}`;
+const matMvId = () => `MM-${String(++matMvSeq).padStart(4, '0')}`;
 
 // --- État stock & mouvements (le stock n'est JAMAIS saisi directement) ---
 let partsMeta = parts.map((p) => ({ ...p })); // métadonnées éditables (sans stock)
@@ -285,9 +322,311 @@ app.post('/api/workorders', (req, res) => {
     downtimeHours: Number(b.downtimeHours) || 0,
     parts: Array.isArray(b.parts) ? b.parts : [],
     tech: b.tech || 'Non assigné',
+    collaborateurs: Array.isArray(b.collaborateurs) ? b.collaborateurs : [],
   });
   orders.unshift(ot);
   res.status(201).json(ot);
+});
+
+// Ajout de pièces sur un OT existant (magasinier, post-diagnostic)
+// Crée automatiquement un mouvement de sortie de stock
+app.post('/api/workorders/:id/parts', (req, res) => {
+  const idx = orders.findIndex((o) => o.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'OT introuvable' });
+  const { ref, qty } = req.body || {};
+  if (!ref || !qty || qty <= 0) return res.status(400).json({ error: 'ref et qty requis' });
+
+  const part = partsMeta.find((p) => p.ref === ref);
+  if (!part) return res.status(404).json({ error: 'Pièce introuvable' });
+  if ((stock[ref] || 0) < qty) return res.status(400).json({ error: 'Stock insuffisant' });
+
+  // Mouvement de sortie
+  mvSeq += 1;
+  const mv = {
+    id: `MV-${String(mvSeq).padStart(4, '0')}`,
+    ref, type: 'Sortie', qty: Number(qty),
+    date: new Date().toISOString().slice(0, 10),
+    motif: 'Consommation OT', reference: req.params.id, user: 'Magasin',
+    stockAfter: (stock[ref] || 0) - Number(qty),
+  };
+  stock[ref] = mv.stockAfter;
+  movements.push(mv);
+
+  // Mise à jour des pièces sur l'OT + revalorisation
+  const existingPart = orders[idx].parts.find((p) => p.ref === ref);
+  if (existingPart) {
+    existingPart.qty += Number(qty);
+  } else {
+    orders[idx].parts.push({ ref, qty: Number(qty) });
+  }
+  orders[idx] = valorizeWorkOrder(orders[idx]);
+
+  res.status(201).json({ workorder: orders[idx], movement: mv });
+});
+
+// Modification d'un OT
+app.put('/api/workorders/:id', (req, res) => {
+  const idx = orders.findIndex((o) => o.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'OT introuvable' });
+  const b = req.body || {};
+  const updated = valorizeWorkOrder({
+    ...orders[idx],
+    machine: b.machine ?? orders[idx].machine,
+    type: b.type ?? orders[idx].type,
+    priority: b.priority ?? orders[idx].priority,
+    status: b.status ?? orders[idx].status,
+    date: b.date ?? orders[idx].date,
+    desc: b.desc ?? orders[idx].desc,
+    laborHours: b.laborHours !== undefined ? Number(b.laborHours) : orders[idx].laborHours,
+    downtimeHours: b.downtimeHours !== undefined ? Number(b.downtimeHours) : orders[idx].downtimeHours,
+    parts: Array.isArray(b.parts) ? b.parts : orders[idx].parts,
+    tech: b.tech ?? orders[idx].tech,
+    collaborateurs: Array.isArray(b.collaborateurs) ? b.collaborateurs : orders[idx].collaborateurs,
+  });
+  orders[idx] = updated;
+  res.json(updated);
+});
+
+// ---- Collaborateurs (paramétrage) ----
+app.get('/api/collaborateurs', (req, res) => res.json(collaborateurs));
+
+app.post('/api/collaborateurs', (req, res) => {
+  const b = req.body || {};
+  if (!b.nom || !b.prenom) return res.status(400).json({ error: 'nom et prenom requis' });
+  const col = {
+    id: `COL-${String(colSeq++).padStart(3, '0')}`,
+    nom: b.nom, prenom: b.prenom,
+    matricule: b.matricule || '',
+    departement: b.departement || '',
+    fonction: b.fonction || '',
+    equipe: b.equipe || '',
+  };
+  collaborateurs.push(col);
+  res.status(201).json(col);
+});
+
+app.put('/api/collaborateurs/:id', (req, res) => {
+  const idx = collaborateurs.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Collaborateur introuvable' });
+  const b = req.body || {};
+  collaborateurs[idx] = { ...collaborateurs[idx], ...b, id: collaborateurs[idx].id };
+  res.json(collaborateurs[idx]);
+});
+
+app.delete('/api/collaborateurs/:id', (req, res) => {
+  const idx = collaborateurs.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Collaborateur introuvable' });
+  collaborateurs.splice(idx, 1);
+  res.json({ ok: true });
+});
+
+// =============================================================
+//  ARTICLES (Produits finis)
+// =============================================================
+function articleView(a) {
+  const cur = articlesStock[a.ref] || 0;
+  const mv = artMovements.filter((m) => m.ref === a.ref);
+  const produced = mv.filter((m) => m.motif === 'Production').reduce((s, m) => s + m.qty, 0);
+  const shipped = mv.filter((m) => m.type === 'Sortie').reduce((s, m) => s + m.qty, 0);
+  const lastMv = mv.length ? mv[mv.length - 1].date : null;
+  return { ...a, stock: cur, produced, shipped, stockValue: a.cout_unitaire * cur, lowStock: cur < a.stock_min, movementsCount: mv.length, lastMovement: lastMv };
+}
+
+app.get('/api/articles', (req, res) => res.json(articlesMeta.map(articleView)));
+
+app.post('/api/articles', (req, res) => {
+  const b = req.body || {};
+  if (!b.ref || !b.designation) return res.status(400).json({ error: 'ref et designation requis' });
+  if (articlesMeta.find((a) => a.ref === b.ref)) return res.status(400).json({ error: 'Référence déjà existante' });
+  const art = { ref: String(b.ref).toUpperCase(), designation: String(b.designation), description: b.description || '', categorie: b.categorie || '', unite: b.unite || 'pc', cout_unitaire: Number(b.cout_unitaire) || 0, stock_min: Number(b.stock_min) || 0, photo: b.photo || null, target: 0 };
+  articlesMeta.push(art);
+  articlesStock[art.ref] = 0;
+  res.status(201).json(articleView(art));
+});
+
+app.put('/api/articles/:ref', (req, res) => {
+  const a = articlesMeta.find((x) => x.ref === req.params.ref);
+  if (!a) return res.status(404).json({ error: 'Article introuvable' });
+  const b = req.body || {};
+  ['designation', 'description', 'categorie', 'unite', 'photo'].forEach((k) => { if (b[k] !== undefined) a[k] = b[k]; });
+  if (b.cout_unitaire !== undefined) a.cout_unitaire = Number(b.cout_unitaire) || 0;
+  if (b.stock_min !== undefined) a.stock_min = Number(b.stock_min) || 0;
+  res.json(articleView(a));
+});
+
+app.delete('/api/articles/:ref', (req, res) => {
+  const idx = articlesMeta.findIndex((x) => x.ref === req.params.ref);
+  if (idx === -1) return res.status(404).json({ error: 'Article introuvable' });
+  const ref = articlesMeta[idx].ref;
+  articlesMeta.splice(idx, 1);
+  delete articlesStock[ref];
+  artMovements = artMovements.filter((m) => m.ref !== ref);
+  res.json({ ok: true });
+});
+
+app.get('/api/articles/:ref/movements', (req, res) => {
+  res.json(artMovements.filter((m) => m.ref === req.params.ref).sort((a, b) => b.date.localeCompare(a.date)));
+});
+
+// Mouvement manuel article (expédition, ajustement...)
+app.post('/api/articles/:ref/movement', (req, res) => {
+  const a = articlesMeta.find((x) => x.ref === req.params.ref);
+  if (!a) return res.status(404).json({ error: 'Article introuvable' });
+  const { type, qty, motif, reference, user } = req.body || {};
+  const q = Number(qty);
+  if (!q || q <= 0) return res.status(400).json({ error: 'Quantité invalide' });
+  if (type === 'Sortie' && (articlesStock[a.ref] || 0) < q) return res.status(400).json({ error: 'Stock insuffisant' });
+  const delta = type === 'Entrée' ? q : -q;
+  articlesStock[a.ref] = (articlesStock[a.ref] || 0) + delta;
+  const mv = { id: artMvId(), ref: a.ref, type: type || 'Sortie', qty: q, date: new Date().toISOString().slice(0, 10), motif: motif || 'Sortie atelier', reference: reference || '', user: user || 'Magasin', stockAfter: articlesStock[a.ref] };
+  artMovements.push(mv);
+  res.status(201).json({ movement: mv, article: articleView(a) });
+});
+
+// =============================================================
+//  MATIÈRES PREMIÈRES
+// =============================================================
+function matiereView(m) {
+  const cur = matieresStock[m.ref] || 0;
+  const mv = matMovements.filter((x) => x.ref === m.ref);
+  const received = mv.filter((x) => x.type === 'Entrée').reduce((s, x) => s + x.qty, 0);
+  const consumed = mv.filter((x) => x.motif === 'Consommation production').reduce((s, x) => s + x.qty, 0);
+  const lastMv = mv.length ? mv[mv.length - 1].date : null;
+  return { ...m, stock: cur, received, consumed, stockValue: m.cout_unitaire * cur, lowStock: cur < m.stock_min, movementsCount: mv.length, lastMovement: lastMv };
+}
+
+app.get('/api/matieres', (req, res) => res.json(matieresMeta.map(matiereView)));
+
+app.post('/api/matieres', (req, res) => {
+  const b = req.body || {};
+  if (!b.ref || !b.designation) return res.status(400).json({ error: 'ref et designation requis' });
+  if (matieresMeta.find((m) => m.ref === b.ref)) return res.status(400).json({ error: 'Référence déjà existante' });
+  const mat = { ref: String(b.ref).toUpperCase(), designation: String(b.designation), description: b.description || '', categorie: b.categorie || '', unite: b.unite || 'kg', cout_unitaire: Number(b.cout_unitaire) || 0, stock_min: Number(b.stock_min) || 0, photo: b.photo || null, target: 0 };
+  matieresMeta.push(mat);
+  matieresStock[mat.ref] = 0;
+  res.status(201).json(matiereView(mat));
+});
+
+app.put('/api/matieres/:ref', (req, res) => {
+  const m = matieresMeta.find((x) => x.ref === req.params.ref);
+  if (!m) return res.status(404).json({ error: 'Matière introuvable' });
+  const b = req.body || {};
+  ['designation', 'description', 'categorie', 'unite', 'photo'].forEach((k) => { if (b[k] !== undefined) m[k] = b[k]; });
+  if (b.cout_unitaire !== undefined) m.cout_unitaire = Number(b.cout_unitaire) || 0;
+  if (b.stock_min !== undefined) m.stock_min = Number(b.stock_min) || 0;
+  res.json(matiereView(m));
+});
+
+app.delete('/api/matieres/:ref', (req, res) => {
+  const idx = matieresMeta.findIndex((x) => x.ref === req.params.ref);
+  if (idx === -1) return res.status(404).json({ error: 'Matière introuvable' });
+  const ref = matieresMeta[idx].ref;
+  matieresMeta.splice(idx, 1);
+  delete matieresStock[ref];
+  matMovements = matMovements.filter((m) => m.ref !== ref);
+  res.json({ ok: true });
+});
+
+app.get('/api/matieres/:ref/movements', (req, res) => {
+  res.json(matMovements.filter((m) => m.ref === req.params.ref).sort((a, b) => b.date.localeCompare(a.date)));
+});
+
+// Mouvement manuel matière (réception fournisseur, ajustement...)
+app.post('/api/matieres/:ref/movement', (req, res) => {
+  const mat = matieresMeta.find((x) => x.ref === req.params.ref);
+  if (!mat) return res.status(404).json({ error: 'Matière introuvable' });
+  const { type, qty, motif, reference, user } = req.body || {};
+  const q = Number(qty);
+  if (!q || q <= 0) return res.status(400).json({ error: 'Quantité invalide' });
+  if (type === 'Sortie' && (matieresStock[mat.ref] || 0) < q) return res.status(400).json({ error: 'Stock insuffisant' });
+  const delta = type === 'Entrée' ? q : -q;
+  matieresStock[mat.ref] = (matieresStock[mat.ref] || 0) + delta;
+  const mv = { id: matMvId(), ref: mat.ref, type: type || 'Entrée', qty: q, date: new Date().toISOString().slice(0, 10), motif: motif || 'Réception fournisseur', reference: reference || '', user: user || 'Magasin', stockAfter: matieresStock[mat.ref] };
+  matMovements.push(mv);
+  res.status(201).json({ movement: mv, matiere: matiereView(mat) });
+});
+
+// =============================================================
+//  PRODUCTIONS
+// =============================================================
+function applyProdStock(prod, reverse = false) {
+  const today = new Date().toISOString().slice(0, 10);
+  // Articles produits → Entrée (ou Sortie si reversal)
+  (prod.articles_produits || []).forEach((a) => {
+    const q = Number(a.qte);
+    const type = reverse ? 'Sortie' : 'Entrée';
+    const delta = reverse ? -q : q;
+    articlesStock[a.ref] = (articlesStock[a.ref] || 0) + delta;
+    artMovements.push({ id: artMvId(), ref: a.ref, type, qty: q, date: today, motif: reverse ? 'Annulation production' : 'Production', reference: prod.id, user: prod.conducteur || 'Production', stockAfter: articlesStock[a.ref] });
+  });
+  // Matières consommées → Sortie (ou Entrée si reversal)
+  (prod.matieres_consommees || []).forEach((m) => {
+    const q = Number(m.qte);
+    const type = reverse ? 'Entrée' : 'Sortie';
+    const delta = reverse ? q : -q;
+    matieresStock[m.ref] = (matieresStock[m.ref] || 0) + delta;
+    matMovements.push({ id: matMvId(), ref: m.ref, type, qty: q, date: today, motif: reverse ? 'Annulation production' : 'Consommation production', reference: prod.id, user: prod.conducteur || 'Production', stockAfter: matieresStock[m.ref] });
+  });
+}
+
+app.get('/api/productions', (req, res) => {
+  res.json([...productionsList].sort((a, b) => b.date.localeCompare(a.date)));
+});
+
+app.post('/api/productions', (req, res) => {
+  const b = req.body || {};
+  if (!b.machine || !b.date) return res.status(400).json({ error: 'machine et date requis' });
+  const raw = {
+    id: prodId(),
+    machine: b.machine,
+    date: b.date,
+    shift_debut: b.shift_debut || '06:00',
+    shift_fin: b.shift_fin || '14:00',
+    conducteur: b.conducteur || '',
+    articles_produits: Array.isArray(b.articles_produits) ? b.articles_produits : [],
+    matieres_consommees: Array.isArray(b.matieres_consommees) ? b.matieres_consommees : [],
+    temps_arret: Number(b.temps_arret) || 0,
+    production_theorique: Number(b.production_theorique) || 0,
+    production_conforme: b.production_conforme != null ? Number(b.production_conforme) : null,
+    observations: b.observations || '',
+  };
+  applyProdStock(raw);
+  const enriched = enrichProduction(raw, collaborateurs);
+  productionsList.push(enriched);
+  res.status(201).json(enriched);
+});
+
+app.put('/api/productions/:id', (req, res) => {
+  const idx = productionsList.findIndex((p) => p.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Production introuvable' });
+  const b = req.body || {};
+  // Reversal des anciens mouvements
+  applyProdStock(productionsList[idx], true);
+  const raw = {
+    ...productionsList[idx],
+    machine: b.machine ?? productionsList[idx].machine,
+    date: b.date ?? productionsList[idx].date,
+    shift_debut: b.shift_debut ?? productionsList[idx].shift_debut,
+    shift_fin: b.shift_fin ?? productionsList[idx].shift_fin,
+    conducteur: b.conducteur ?? productionsList[idx].conducteur,
+    articles_produits: Array.isArray(b.articles_produits) ? b.articles_produits : productionsList[idx].articles_produits,
+    matieres_consommees: Array.isArray(b.matieres_consommees) ? b.matieres_consommees : productionsList[idx].matieres_consommees,
+    temps_arret: b.temps_arret !== undefined ? Number(b.temps_arret) : productionsList[idx].temps_arret,
+    production_theorique: b.production_theorique !== undefined ? Number(b.production_theorique) : productionsList[idx].production_theorique,
+    production_conforme: b.production_conforme !== undefined ? Number(b.production_conforme) : productionsList[idx].production_conforme,
+    observations: b.observations ?? productionsList[idx].observations,
+  };
+  applyProdStock(raw);
+  productionsList[idx] = enrichProduction(raw, collaborateurs);
+  res.json(productionsList[idx]);
+});
+
+app.delete('/api/productions/:id', (req, res) => {
+  const idx = productionsList.findIndex((p) => p.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Production introuvable' });
+  applyProdStock(productionsList[idx], true);
+  productionsList.splice(idx, 1);
+  res.json({ ok: true });
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'GMAO Becomar API' }));
