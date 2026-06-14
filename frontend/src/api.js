@@ -1,5 +1,5 @@
 // Client API. En dev : proxy Vite. En prod : VITE_API_URL pointe vers le backend Render.
-const BASE = (import.meta.env.VITE_API_URL || '') + '/api';
+const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 
 async function get(path) {
   const res = await fetch(`${BASE}${path}`);
