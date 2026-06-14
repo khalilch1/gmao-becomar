@@ -1,24 +1,82 @@
 import { useState } from 'react';
-import { Plus, X, Pencil, ArrowDownToLine, ArrowUpFromLine, Trash2 } from 'lucide-react';
+import { Plus, X, Pencil, ArrowDownToLine, ArrowUpFromLine, Trash2, History, Settings } from 'lucide-react';
 import { api, dh, num } from '../App.jsx';
 import { Loading, Pill, useFetch, KpiSimple as KpiCard, FilterBar } from '../components/Common.jsx';
 
-const CATEGORIES = ['Bois brut', 'Adhésifs', 'Consommables', 'Métaux', 'Emballages', 'Produits chimiques', 'Autre'];
 const UNITES = ['kg', 'T', 'm³', 'm²', 'ml', 'L', 'rouleau', 'pc', 'sac', 'fût'];
 const MOTIFS_ENTREE = ['Réception fournisseur', 'Retour production', 'Ajustement inventaire', 'Régularisation'];
 const MOTIFS_SORTIE = ['Consommation atelier', 'Rebut', 'Ajustement inventaire'];
 
-const EMPTY = { ref: '', designation: '', description: '', categorie: 'Bois brut', unite: 'm³', cout_unitaire: 0, stock_min: 0, photo: '' };
+function ParamModal({ title, list, onSave, onClose }) {
+  const [items, setItems] = useState([...list]);
+  const [newVal, setNewVal] = useState('');
+  const [saving, setSaving] = useState(false);
+  const add = () => {
+    const v = newVal.trim();
+    if (!v || items.includes(v)) return;
+    setItems([...items, v]); setNewVal('');
+  };
+  const remove = (i) => setItems(items.filter((_, idx) => idx !== i));
+  const save = async () => {
+    setSaving(true);
+    await onSave(items);
+    setSaving(false);
+    onClose();
+  };
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+        <div className="card-head">
+          <div className="card-title">{title}</div>
+          <button className="btn" onClick={onClose} style={{ padding: '7px 10px' }}><X size={16} /></button>
+        </div>
+        <div style={{ padding: '12px 22px 22px' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <input className="input" style={{ flex: 1 }} value={newVal} onChange={(e) => setNewVal(e.target.value)}
+              placeholder="Nouvelle catégorie…" onKeyDown={(e) => e.key === 'Enter' && add()} />
+            <button className="btn btn-primary" onClick={add} style={{ padding: '0 16px' }}><Plus size={15} /></button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
+            {items.map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px' }}>
+                <span style={{ fontSize: 14 }}>{item}</span>
+                <button className="btn" style={{ padding: '3px 7px', color: '#ef4444' }} onClick={() => remove(i)}><X size={13} /></button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
+            <button className="btn" onClick={onClose}>Annuler</button>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const EMPTY = { ref: '', designation: '', description: '', categorie: '', unite: 'm³', cout_unitaire: 0, stock_min: 0, photo: '' };
 
 export default function MatieresPremieres() {
+  const [reloadP, setReloadP] = useState(0);
+  const { data: paramsData } = useFetch(api.params, [reloadP]);
+  const categories = paramsData?.mp_categories ?? ['Bois brut', 'Adhésifs', 'Consommables', 'Métaux', 'Emballages', 'Produits chimiques', 'Autre'];
+
   const [reload, setReload] = useState(0);
   const { data } = useFetch(api.matieres, [reload]);
+
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [mvMat, setMvMat] = useState(null);
   const [mvForm, setMvForm] = useState({ type: 'Entrée', qty: 1, motif: 'Réception fournisseur', reference: '' });
+  const [histMat, setHistMat] = useState(null);
+  const [histData, setHistData] = useState([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const [showParam, setShowParam] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [filters, setFilters] = useState({ q: '', categorie: 'Tous', lowStock: false });
@@ -64,6 +122,19 @@ export default function MatieresPremieres() {
     finally { setSaving(false); }
   };
 
+  const openHist = async (m) => {
+    setHistMat(m); setHistData([]); setHistLoading(true);
+    try { const mvs = await api.matiereMovements(m.ref); setHistData(mvs); }
+    catch { setHistData([]); }
+    finally { setHistLoading(false); }
+  };
+
+  const saveCategories = async (values) => {
+    await api.updateParam('mp_categories', values);
+    setReloadP((r) => r + 1);
+    setFilters((f) => ({ ...f, categorie: 'Tous' }));
+  };
+
   if (!data) return <Loading />;
 
   const totalStockVal = data.reduce((s, m) => s + m.stockValue, 0);
@@ -86,19 +157,31 @@ export default function MatieresPremieres() {
         <p className="muted" style={{ fontSize: 13.5 }}>
           Gestion des <b style={{ color: 'var(--text)' }}>matières premières</b>. Le stock diminue automatiquement à chaque saisie de production.
         </p>
-        <button className="btn btn-primary" onClick={() => { setOpen(true); setErr(''); }}>
-          <Plus size={17} /> Nouvelle matière
-        </button>
+        <div className="flex gap" style={{ gap: 8 }}>
+          <button className="btn" onClick={() => setShowParam(true)}>
+            <Settings size={15} /> Catégories
+          </button>
+          <button className="btn btn-primary" onClick={() => { setOpen(true); setErr(''); setForm({ ...EMPTY, categorie: categories[0] || '' }); }}>
+            <Plus size={17} /> Nouvelle matière
+          </button>
+        </div>
       </div>
 
-      {/* KPIs */}
       <div className="kpi-row" style={{ marginBottom: 20 }}>
         <KpiCard label="Valeur stock MP" value={dh(totalStockVal)} sub={`${data.length} références`} tone="orange" />
         <KpiCard label="Total consommé" value={num(+totalConsumed.toFixed(1))} sub="unités consommées en production" tone="teal" />
         <KpiCard label="Alertes stock bas" value={lowCount} sub={lowCount > 0 ? 'matières sous le minimum' : 'Tout est OK'} tone={lowCount > 0 ? 'bad' : 'good'} />
       </div>
 
-      {/* Formulaire création */}
+      {showParam && (
+        <ParamModal
+          title="Catégories de matières premières"
+          list={categories}
+          onSave={saveCategories}
+          onClose={() => setShowParam(false)}
+        />
+      )}
+
       {open && (
         <div className="card" style={{ marginBottom: 18, borderColor: 'var(--accent)' }}>
           <div className="card-head">
@@ -111,7 +194,7 @@ export default function MatieresPremieres() {
               <input className="input mono" value={form.ref} onChange={set('ref')} placeholder="MP-XXX-00" /></div>
             <div className="field"><label>Catégorie</label>
               <select className="select" value={form.categorie} onChange={set('categorie')}>
-                {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                {categories.map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
           </div>
@@ -143,7 +226,6 @@ export default function MatieresPremieres() {
         </div>
       )}
 
-      {/* Modal modification */}
       {editing && (
         <div className="overlay" onClick={() => setEditing(null)}>
           <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
@@ -158,7 +240,7 @@ export default function MatieresPremieres() {
                   <input className="input" value={editForm.designation} onChange={setE('designation')} /></div>
                 <div className="field"><label>Catégorie</label>
                   <select className="select" value={editForm.categorie} onChange={setE('categorie')}>
-                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                    {categories.map((c) => <option key={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
@@ -190,7 +272,6 @@ export default function MatieresPremieres() {
         </div>
       )}
 
-      {/* Modal mouvement (réception / ajustement) */}
       {mvMat && (
         <div className="overlay" onClick={() => setMvMat(null)}>
           <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
@@ -235,7 +316,52 @@ export default function MatieresPremieres() {
         </div>
       )}
 
-      {/* Tableau */}
+      {histMat && (
+        <div className="overlay" onClick={() => setHistMat(null)}>
+          <div className="modal" style={{ maxWidth: 700 }} onClick={(e) => e.stopPropagation()}>
+            <div className="card-head">
+              <div>
+                <div className="card-title">Historique — {histMat.designation}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{histMat.ref} · Stock actuel : <b>{num(+histMat.stock.toFixed(2))} {histMat.unite}</b></div>
+              </div>
+              <button className="btn" onClick={() => setHistMat(null)} style={{ padding: '7px 10px' }}><X size={16} /></button>
+            </div>
+            <div style={{ padding: '0 22px 22px' }}>
+              {histLoading ? <div className="muted" style={{ padding: 24, textAlign: 'center' }}>Chargement…</div>
+                : histData.length === 0 ? <div className="muted" style={{ padding: 24, textAlign: 'center' }}>Aucun mouvement.</div>
+                : (
+                  <div className="table-wrap" style={{ maxHeight: 420, overflowY: 'auto' }}>
+                    <table>
+                      <thead><tr><th>Date</th><th>Type</th><th className="mono">Qté</th><th>Motif</th><th>Référence</th><th>Source</th></tr></thead>
+                      <tbody>
+                        {[...histData].reverse().map((mv, i) => (
+                          <tr key={i}>
+                            <td className="muted" style={{ fontSize: 12 }}>{mv.date ? new Date(mv.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+                            <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: mv.type === 'Entrée' ? '#2DD4BF' : '#FB923C', fontWeight: 600, fontSize: 12 }}>
+                              {mv.type === 'Entrée' ? <ArrowDownToLine size={13} /> : <ArrowUpFromLine size={13} />}{mv.type}
+                            </span></td>
+                            <td className="mono cell-strong" style={{ color: mv.type === 'Entrée' ? '#2DD4BF' : '#FB923C' }}>{mv.type === 'Entrée' ? '+' : '-'}{num(+mv.qty.toFixed(2))} {histMat.unite}</td>
+                            <td className="muted" style={{ fontSize: 12 }}>{mv.motif || '—'}</td>
+                            <td className="cell-code" style={{ fontSize: 12 }}>{mv.reference || '—'}</td>
+                            <td className="muted" style={{ fontSize: 11 }}>{mv.source || 'Manuel'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              {histData.length > 0 && (
+                <div style={{ display: 'flex', gap: 20, marginTop: 14, fontSize: 13 }}>
+                  <span style={{ color: '#2DD4BF' }}>↓ Entrées : <b>{num(+(histData.filter(m => m.type === 'Entrée').reduce((s, m) => s + m.qty, 0)).toFixed(2))} {histMat.unite}</b></span>
+                  <span style={{ color: '#FB923C' }}>↑ Sorties : <b>{num(+(histData.filter(m => m.type === 'Sortie').reduce((s, m) => s + m.qty, 0)).toFixed(2))} {histMat.unite}</b></span>
+                  <span className="muted">{histData.length} mouvement{histData.length > 1 ? 's' : ''}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="card-head">
           <div className="card-title">Stock matières premières</div>
@@ -244,7 +370,7 @@ export default function MatieresPremieres() {
         <FilterBar
           filters={[
             { key: 'q', label: 'Rechercher (référence, désignation…)', type: 'text' },
-            { key: 'categorie', label: 'Catégorie', type: 'select', options: ['Tous', ...CATEGORIES] },
+            { key: 'categorie', label: 'Catégorie', type: 'select', options: ['Tous', ...categories] },
             { key: 'lowStock', label: '⚠ Stock bas uniquement', type: 'toggle' },
           ]}
           values={filters} onChange={setF} total={data.length} shown={filteredMatieres.length}
@@ -269,9 +395,7 @@ export default function MatieresPremieres() {
                   </td>
                   <td><Pill tone="teal">{m.categorie}</Pill></td>
                   <td className="mono">
-                    <span style={{ color: m.lowStock ? '#fbbf24' : 'var(--text)', fontWeight: m.lowStock ? 700 : 400 }}>
-                      {num(+m.stock.toFixed(2))}
-                    </span>
+                    <span style={{ color: m.lowStock ? '#fbbf24' : 'var(--text)', fontWeight: m.lowStock ? 700 : 400 }}>{num(+m.stock.toFixed(2))}</span>
                     <span className="muted" style={{ fontSize: 11 }}> {m.unite}</span>
                     {m.lowStock && <div className="muted" style={{ fontSize: 10, color: '#fbbf24' }}>⚠ Min: {m.stock_min}</div>}
                   </td>
@@ -283,6 +407,7 @@ export default function MatieresPremieres() {
                     <div className="flex gap" style={{ gap: 5 }}>
                       <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(m)} title="Modifier"><Pencil size={13} /></button>
                       <button className="btn" style={{ padding: '5px 8px', color: 'var(--teal)' }} onClick={() => openMv(m)} title="Réception / mouvement"><ArrowDownToLine size={13} /></button>
+                      <button className="btn" style={{ padding: '5px 8px', color: '#A78BFA' }} onClick={() => openHist(m)} title="Historique"><History size={13} /></button>
                       <button className="btn" style={{ padding: '5px 8px', color: '#ef4444' }} onClick={() => deleteMatiere(m)} title="Supprimer"><Trash2 size={13} /></button>
                     </div>
                   </td>

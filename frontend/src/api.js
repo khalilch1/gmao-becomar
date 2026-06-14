@@ -80,4 +80,7 @@ export const api = {
   movements: () => get('/movements'),
   createMovement: (data) => post('/movements', data),
   movementsMeta: () => get('/movements-meta'),
+  // Paramètres (catégories, départements, fonctions)
+  params: () => get('/params'),
+  updateParam: (key, values) => put(`/params/${key}`, { values }),
 };

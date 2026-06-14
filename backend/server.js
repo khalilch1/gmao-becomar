@@ -54,6 +54,14 @@ let matieresStock = { ...initialMatieresStock };
 let matMovements = [...seedMatieresMovements];
 let matMvSeq = matMovements.length;
 
+// Paramètres dynamiques
+let params = {
+  art_categories: ['Planches', 'Panneaux', 'Charpente', 'Ossature', 'Finition', 'Autre'],
+  mp_categories: ['Bois brut', 'Adhésifs', 'Consommables', 'Métaux', 'Emballages', 'Produits chimiques', 'Autre'],
+  departements: ['Direction', 'Administration', 'Production', 'Maintenance', 'Qualité', 'Logistique', 'Achats', 'Ressources Humaines', 'Finance'],
+  fonctions: ['Technicien maintenance', "Chef d'équipe", 'Électricien', 'Mécanicien', 'Magasinier', 'Responsable maintenance'],
+};
+
 // Productions
 let productionsList = [...seedProductions];
 let prodSeq = productionsList.length + 1;
@@ -387,6 +395,22 @@ app.put('/api/workorders/:id', (req, res) => {
   res.json(updated);
 });
 
+// =============================================================
+//  PARAMÈTRES (catégories, départements, fonctions)
+// =============================================================
+app.get('/api/params', (req, res) => res.json(params));
+
+app.put('/api/params/:key', (req, res) => {
+  const { key } = req.params;
+  if (!Object.prototype.hasOwnProperty.call(params, key)) {
+    return res.status(404).json({ error: `Paramètre inconnu : ${key}` });
+  }
+  const { values } = req.body || {};
+  if (!Array.isArray(values)) return res.status(400).json({ error: 'values doit être un tableau' });
+  params[key] = values.map(String).filter(Boolean);
+  res.json({ key, values: params[key] });
+});
+
 // ---- Collaborateurs (paramétrage) ----
 app.get('/api/collaborateurs', (req, res) => res.json(collaborateurs));
 
@@ -399,7 +423,6 @@ app.post('/api/collaborateurs', (req, res) => {
     matricule: b.matricule || '',
     departement: b.departement || '',
     fonction: b.fonction || '',
-    equipe: b.equipe || '',
   };
   collaborateurs.push(col);
   res.status(201).json(col);
@@ -591,7 +614,7 @@ app.post('/api/productions', (req, res) => {
     observations: b.observations || '',
   };
   applyProdStock(raw);
-  const enriched = enrichProduction(raw, collaborateurs);
+  const enriched = enrichProduction(raw, collaborateurs, articlesMeta, matieresMeta);
   productionsList.push(enriched);
   res.status(201).json(enriched);
 });
@@ -617,7 +640,7 @@ app.put('/api/productions/:id', (req, res) => {
     observations: b.observations ?? productionsList[idx].observations,
   };
   applyProdStock(raw);
-  productionsList[idx] = enrichProduction(raw, collaborateurs);
+  productionsList[idx] = enrichProduction(raw, collaborateurs, articlesMeta, matieresMeta);
   res.json(productionsList[idx]);
 });
 

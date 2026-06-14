@@ -216,15 +216,22 @@ function calcTRS(prod) {
   };
 }
 
-function enrichProduction(prod, collaborateursArr) {
+function enrichProduction(prod, collaborateursArr, articlesArr, matieresArr) {
   const machine = machines.find((m) => m.code === prod.machine) || {};
   const conducteurObj = (collaborateursArr || collaborateurs).find((c) => c.id === prod.conducteur);
+  // Construire un index à partir des arrays dynamiques si fournis, sinon utiliser le seed
+  const aMap = articlesArr
+    ? Object.fromEntries(articlesArr.map((a) => [a.ref, a]))
+    : articlesMap;
+  const mMap = matieresArr
+    ? Object.fromEntries(matieresArr.map((m) => [m.ref, m]))
+    : matieresMap;
   const articlesDetail = (prod.articles_produits || []).map((a) => {
-    const art = articlesMap[a.ref] || { designation: a.ref, cout_unitaire: 0, unite: '' };
+    const art = aMap[a.ref] || { designation: a.ref, cout_unitaire: 0, unite: '' };
     return { ref: a.ref, designation: art.designation, qte: Number(a.qte), cout_unitaire: art.cout_unitaire, unite: art.unite, total: art.cout_unitaire * Number(a.qte) };
   });
   const matieresDetail = (prod.matieres_consommees || []).map((m) => {
-    const mat = matieresMap[m.ref] || { designation: m.ref, cout_unitaire: 0, unite: '' };
+    const mat = mMap[m.ref] || { designation: m.ref, cout_unitaire: 0, unite: '' };
     return { ref: m.ref, designation: mat.designation, qte: Number(m.qte), cout_unitaire: mat.cout_unitaire, unite: mat.unite, total: mat.cout_unitaire * Number(m.qte) };
   });
   const trsData = calcTRS(prod);
