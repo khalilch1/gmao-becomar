@@ -3,6 +3,8 @@
 // =============================================================
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const {
   LABOR_RATE,
   units,
@@ -33,6 +35,141 @@ app.use(cors({
 app.use(express.json());
 
 const PORT = process.env.PORT || 4000;
+const JWT_SECRET = process.env.JWT_SECRET || 'gmao-becomar-secret-2026';
+
+// =============================================================
+//  MODULES & GROUPES / UTILISATEURS
+// =============================================================
+const ALL_MODULES = ['dashboard','workorders','machines','parts','movements','analytics','timetracking','production','collaborateurs','articles','matieres','users'];
+const WRITE_ALL = Object.fromEntries(ALL_MODULES.map((m) => [m, 'write']));
+const READ_ALL  = Object.fromEntries(ALL_MODULES.map((m) => [m, m === 'users' ? 'none' : 'read']));
+
+let groupes = [
+  { id: 'GRP-001', nom: 'Administrateur', description: 'Accès complet à toutes les fonctionnalités', permissions: { ...WRITE_ALL } },
+  { id: 'GRP-002', nom: 'Responsable Maintenance', description: 'Gestion complète de la maintenance', permissions: { dashboard: 'read', workorders: 'write', machines: 'write', parts: 'write', movements: 'write', analytics: 'read', timetracking: 'read', production: 'read', collaborateurs: 'write', articles: 'none', matieres: 'none', users: 'none' } },
+  { id: 'GRP-003', nom: 'Opérateur Production', description: 'Saisie production et consultation', permissions: { dashboard: 'read', workorders: 'none', machines: 'read', parts: 'none', movements: 'none', analytics: 'read', timetracking: 'none', production: 'write', collaborateurs: 'none', articles: 'read', matieres: 'read', users: 'none' } },
+  { id: 'GRP-004', nom: 'Magasinier', description: 'Gestion des stocks et pièces', permissions: { dashboard: 'read', workorders: 'read', machines: 'none', parts: 'write', movements: 'write', analytics: 'none', timetracking: 'none', production: 'none', collaborateurs: 'none', articles: 'write', matieres: 'write', users: 'none' } },
+  { id: 'GRP-005', nom: 'Consultation', description: 'Accès lecture seule sur tous les modules', permissions: { ...READ_ALL } },
+];
+let grpSeq = groupes.length + 1;
+
+let users = [
+  { id: 'USR-001', username: 'admin', password_hash: bcrypt.hashSync('Admin123!', 10), nom: 'Administrateur', prenom: 'Système', email: 'admin@becomar.ma', groupe_id: 'GRP-001', actif: true },
+];
+let usrSeq = users.length + 1;
+
+// ---- Middleware auth ----
+function authMiddleware(req, res, next) {
+  const h = req.headers.authorization;
+  if (!h || !h.startsWith('Bearer ')) return res.status(401).json({ error: 'Non authentifié' });
+  try {
+    req.user = jwt.verify(h.slice(7), JWT_SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: 'Token invalide ou expiré' });
+  }
+}
+function adminMiddleware(req, res, next) {
+  const grp = groupes.find((g) => g.id === req.user?.groupe_id);
+  if (!grp || grp.permissions.users !== 'write') return res.status(403).json({ error: 'Accès réservé aux administrateurs' });
+  next();
+}
+function userView(u) {
+  const { password_hash, ...safe } = u;
+  const grp = groupes.find((g) => g.id === u.groupe_id);
+  return { ...safe, groupe_nom: grp?.nom || '—', permissions: grp?.permissions || {} };
+}
+
+// =============================================================
+//  ROUTES AUTH
+// =============================================================
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body || {};
+  const user = users.find((u) => u.username === username && u.actif);
+  if (!user || !bcrypt.compareSync(password, user.password_hash))
+    return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
+  const token = jwt.sign({ id: user.id, username: user.username, groupe_id: user.groupe_id }, JWT_SECRET, { expiresIn: '8h' });
+  res.json({ token, user: userView(user) });
+});
+
+app.get('/api/auth/me', authMiddleware, (req, res) => {
+  const user = users.find((u) => u.id === req.user.id);
+  if (!user || !user.actif) return res.status(401).json({ error: 'Compte désactivé' });
+  res.json(userView(user));
+});
+
+// =============================================================
+//  GESTION UTILISATEURS (admin)
+// =============================================================
+app.get('/api/users', authMiddleware, adminMiddleware, (req, res) => res.json(users.map(userView)));
+
+app.post('/api/users', authMiddleware, adminMiddleware, (req, res) => {
+  const b = req.body || {};
+  if (!b.username?.trim() || !b.password?.trim()) return res.status(400).json({ error: 'username et password requis' });
+  if (users.find((u) => u.username === b.username)) return res.status(400).json({ error: "Nom d'utilisateur déjà utilisé" });
+  const grp = groupes.find((g) => g.id === b.groupe_id);
+  if (!grp) return res.status(400).json({ error: 'Groupe invalide' });
+  const u = { id: `USR-${String(usrSeq++).padStart(3, '0')}`, username: b.username.trim(), password_hash: bcrypt.hashSync(b.password, 10), nom: b.nom || '', prenom: b.prenom || '', email: b.email || '', groupe_id: b.groupe_id, actif: b.actif !== false };
+  users.push(u);
+  res.status(201).json(userView(u));
+});
+
+app.put('/api/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+  const idx = users.findIndex((u) => u.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Utilisateur introuvable' });
+  const b = req.body || {};
+  if (b.groupe_id && !groupes.find((g) => g.id === b.groupe_id)) return res.status(400).json({ error: 'Groupe invalide' });
+  const u = users[idx];
+  if (b.username !== undefined) u.username = b.username.trim();
+  if (b.nom !== undefined) u.nom = b.nom;
+  if (b.prenom !== undefined) u.prenom = b.prenom;
+  if (b.email !== undefined) u.email = b.email;
+  if (b.groupe_id !== undefined) u.groupe_id = b.groupe_id;
+  if (b.actif !== undefined) u.actif = b.actif;
+  if (b.password?.trim()) u.password_hash = bcrypt.hashSync(b.password, 10);
+  res.json(userView(u));
+});
+
+app.delete('/api/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+  if (req.params.id === req.user.id) return res.status(400).json({ error: 'Impossible de supprimer son propre compte' });
+  const idx = users.findIndex((u) => u.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Utilisateur introuvable' });
+  users.splice(idx, 1);
+  res.json({ ok: true });
+});
+
+// =============================================================
+//  GESTION GROUPES (admin)
+// =============================================================
+app.get('/api/groupes', authMiddleware, (req, res) => res.json(groupes));
+
+app.post('/api/groupes', authMiddleware, adminMiddleware, (req, res) => {
+  const b = req.body || {};
+  if (!b.nom?.trim()) return res.status(400).json({ error: 'Nom du groupe requis' });
+  const perms = {};
+  ALL_MODULES.forEach((m) => { perms[m] = ['none','read','write'].includes(b.permissions?.[m]) ? b.permissions[m] : 'none'; });
+  const grp = { id: `GRP-${String(grpSeq++).padStart(3, '0')}`, nom: b.nom.trim(), description: b.description || '', permissions: perms };
+  groupes.push(grp);
+  res.status(201).json(grp);
+});
+
+app.put('/api/groupes/:id', authMiddleware, adminMiddleware, (req, res) => {
+  const grp = groupes.find((g) => g.id === req.params.id);
+  if (!grp) return res.status(404).json({ error: 'Groupe introuvable' });
+  const b = req.body || {};
+  if (b.nom !== undefined) grp.nom = b.nom.trim();
+  if (b.description !== undefined) grp.description = b.description;
+  if (b.permissions) ALL_MODULES.forEach((m) => { if (['none','read','write'].includes(b.permissions[m])) grp.permissions[m] = b.permissions[m]; });
+  res.json(grp);
+});
+
+app.delete('/api/groupes/:id', authMiddleware, adminMiddleware, (req, res) => {
+  if (users.find((u) => u.groupe_id === req.params.id)) return res.status(400).json({ error: 'Groupe utilisé par des utilisateurs' });
+  const idx = groupes.findIndex((g) => g.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Groupe introuvable' });
+  groupes.splice(idx, 1);
+  res.json({ ok: true });
+});
 
 // État mutable en mémoire (les OT créés s'ajoutent ici)
 let orders = [...workOrders];

@@ -1,8 +1,13 @@
 // Client API. En dev : proxy Vite. En prod : VITE_API_URL pointe vers le backend Render.
 const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 
+const authHeaders = () => {
+  const t = localStorage.getItem('gmao_token');
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
+
 async function get(path) {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Erreur ${res.status} sur ${path}`);
   return res.json();
 }
@@ -10,7 +15,7 @@ async function get(path) {
 async function post(path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -21,7 +26,7 @@ async function post(path, body) {
 }
 
 async function del(path) {
-  const res = await fetch(`${BASE}${path}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE}${path}`, { method: 'DELETE', headers: authHeaders() });
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
     throw new Error(e.error || `Erreur ${res.status} sur ${path}`);
@@ -32,7 +37,7 @@ async function del(path) {
 async function put(path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
