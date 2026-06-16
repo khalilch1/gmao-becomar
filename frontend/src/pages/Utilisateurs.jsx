@@ -81,56 +81,66 @@ function PermMatrix({ permissions, onChange, readOnly = false }) {
     <div>
       {!readOnly && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          <button className="btn" style={{ fontSize: 11, padding: '3px 10px' }} onClick={() => setAll(false)}>Tout refuser</button>
-          <button className="btn" style={{ fontSize: 11, padding: '3px 10px', color: '#34D399' }} onClick={() => setAll(true)}>Tout autoriser</button>
+          <button type="button" className="btn" style={{ fontSize: 11, padding: '3px 10px' }} onClick={() => setAll(false)}>Tout refuser</button>
+          <button type="button" className="btn" style={{ fontSize: 11, padding: '3px 10px', color: '#34D399' }} onClick={() => setAll(true)}>Tout autoriser</button>
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 380, overflowY: 'auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 400, overflowY: 'auto', paddingRight: 2 }}>
         {MODULES.map((m) => {
           const actions = MODULES_ACTIONS[m.key] || [];
           const allTrue = actions.every((a) => permissions[m.key]?.[a]);
           const anyTrue = actions.some((a) => permissions[m.key]?.[a]);
           return (
-            <div key={m.key} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', gap: 8, borderBottom: anyTrue ? '1px solid var(--border)' : 'none' }}>
+            <div key={m.key} style={{ background: 'var(--surface-2)', border: `1px solid ${anyTrue ? 'var(--border)' : 'var(--border)'}`, borderRadius: 8 }}>
+              {/* Ligne module */}
+              <div style={{ display: 'flex', alignItems: 'center', padding: '7px 10px', gap: 8, borderBottom: anyTrue ? '1px solid var(--border)' : 'none' }}>
                 {!readOnly && (
-                  <input
-                    type="checkbox"
-                    checked={allTrue}
-                    ref={(el) => { if (el) el.indeterminate = anyTrue && !allTrue; }}
-                    onChange={(e) => setAllModule(m.key, e.target.checked)}
-                    style={{ accentColor: 'var(--teal)', width: 13, height: 13, cursor: 'pointer', flexShrink: 0 }}
-                  />
+                  <button type="button" onClick={() => setAllModule(m.key, !allTrue)} style={{
+                    width: 16, height: 16, borderRadius: 4, flexShrink: 0, cursor: 'pointer', padding: 0,
+                    border: `2px solid ${anyTrue ? '#2DD4BF' : 'var(--border)'}`,
+                    background: allTrue ? '#2DD4BF' : anyTrue ? 'rgba(45,212,191,0.15)' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {allTrue && <Check size={10} color="#fff" strokeWidth={3} />}
+                    {anyTrue && !allTrue && <span style={{ width: 8, height: 2, background: '#2DD4BF', borderRadius: 1, display: 'block' }} />}
+                  </button>
                 )}
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: anyTrue ? 'var(--text)' : 'var(--text-muted)', flex: 1 }}>{m.label}</span>
-                {!anyTrue && <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>Accès refusé</span>}
+                <span style={{ fontSize: 13, fontWeight: 600, color: anyTrue ? 'var(--text)' : 'var(--text-muted)', flex: 1 }}>{m.label}</span>
+                {!anyTrue && <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.04em' }}>Accès refusé</span>}
               </div>
-              {anyTrue && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 10px' }}>
-                  {actions.map((action) => {
-                    const val = permissions[m.key]?.[action] || false;
-                    const color = ACTION_COLORS[action] || '#94A3B8';
-                    return (
-                      <label key={action} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4, cursor: readOnly ? 'default' : 'pointer',
-                        padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                        background: val ? `${color}22` : 'var(--bg)',
-                        border: `1px solid ${val ? color : 'var(--border)'}`,
-                        color: val ? color : 'var(--text-muted)',
-                        transition: 'all 0.12s',
-                        opacity: !val && readOnly ? 0.4 : 1,
-                      }}>
-                        {!readOnly && (
-                          <input type="checkbox" checked={val} onChange={() => toggle(m.key, action)}
-                            style={{ width: 11, height: 11, accentColor: color, cursor: 'pointer' }} />
-                        )}
-                        {val && readOnly && <Check size={10} />}
-                        {ACTION_LABELS[action] || action}
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
+              {/* Actions — toujours visibles pour permettre la sélection individuelle */}
+              <div style={{ padding: '6px 10px 8px', display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {actions.map((action) => {
+                  const val = permissions[m.key]?.[action] === true;
+                  const color = ACTION_COLORS[action] || '#94A3B8';
+                  return (
+                    <button key={action} type="button" onClick={() => !readOnly && toggle(m.key, action)} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      cursor: readOnly ? 'default' : 'pointer',
+                      padding: '3px 9px', borderRadius: 6, border: 'none', outline: 'none',
+                      background: val ? `${color}25` : 'rgba(255,255,255,0.04)',
+                      boxShadow: `inset 0 0 0 1px ${val ? color : 'rgba(255,255,255,0.12)'}`,
+                      color: val ? color : 'rgba(255,255,255,0.4)',
+                      fontSize: 12, fontWeight: 500, lineHeight: '20px',
+                      opacity: !val && readOnly ? 0.3 : 1,
+                      transition: 'all 0.12s',
+                    }}>
+                      {!readOnly && (
+                        <span style={{
+                          width: 12, height: 12, borderRadius: 3, flexShrink: 0,
+                          background: val ? color : 'transparent',
+                          boxShadow: `inset 0 0 0 1.5px ${val ? color : 'rgba(255,255,255,0.25)'}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {val && <Check size={8} color="#000" strokeWidth={3} />}
+                        </span>
+                      )}
+                      {val && readOnly && <Check size={10} />}
+                      {ACTION_LABELS[action] || action}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
@@ -181,36 +191,48 @@ function UserOverrideMatrix({ groupPerms, overrides, onChange }) {
           </button>
         )}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 320, overflowY: 'auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 340, overflowY: 'auto', paddingRight: 2 }}>
         {MODULES.map((m) => {
           const actions = MODULES_ACTIONS[m.key] || [];
           const anyEffective = actions.some((a) => effective[m.key]?.[a]);
+          const hasModuleOverride = !!overrides[m.key];
           return (
-            <div key={m.key} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-              <div style={{ padding: '6px 10px', borderBottom: anyEffective ? '1px solid var(--border)' : 'none' }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: anyEffective ? 'var(--text)' : 'var(--text-muted)' }}>{m.label}</span>
+            <div key={m.key} style={{ background: 'var(--surface-2)', border: `1px solid ${hasModuleOverride ? 'rgba(251,146,60,0.4)' : 'var(--border)'}`, borderRadius: 8 }}>
+              <div style={{ padding: '7px 10px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: anyEffective ? 'var(--text)' : 'var(--text-muted)', flex: 1 }}>{m.label}</span>
+                {hasModuleOverride && <span style={{ fontSize: 10, color: '#FB923C', fontWeight: 600 }}>surcharge active</span>}
+                {!anyEffective && <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>Accès refusé</span>}
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 10px' }}>
+              <div style={{ padding: '6px 10px 8px', display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {actions.map((action) => {
-                  const eff = effective[m.key]?.[action] || false;
-                  const grpVal = groupPerms[m.key]?.[action] || false;
+                  const eff = effective[m.key]?.[action] === true;
+                  const grpVal = groupPerms[m.key]?.[action] === true;
                   const isOverride = overrides[m.key]?.[action] !== undefined;
                   const color = isOverride ? '#FB923C' : (eff ? ACTION_COLORS[action] || '#94A3B8' : '#4B5563');
                   return (
-                    <label key={action} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer',
-                      padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                      background: eff ? `${color}22` : 'var(--bg)',
-                      border: `1px solid ${isOverride ? '#FB923C' : (eff ? color : 'var(--border)')}`,
-                      color: eff ? color : 'var(--text-muted)',
-                      opacity: !eff ? 0.5 : 1,
-                      transition: 'all 0.12s',
-                    }} title={isOverride ? `Surcharge: groupe=${grpVal ? 'autorisé' : 'refusé'}` : `Hérité du groupe`}>
-                      <input type="checkbox" checked={eff} onChange={() => toggle(m.key, action)}
-                        style={{ width: 11, height: 11, accentColor: isOverride ? '#FB923C' : color, cursor: 'pointer' }} />
+                    <button key={action} type="button" onClick={() => toggle(m.key, action)}
+                      title={isOverride ? `Surcharge (groupe: ${grpVal ? 'autorisé' : 'refusé'})` : 'Hérité du groupe'}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        cursor: 'pointer', padding: '3px 9px', borderRadius: 6, border: 'none', outline: 'none',
+                        background: eff ? `${color}25` : 'rgba(255,255,255,0.04)',
+                        boxShadow: `inset 0 0 0 1px ${isOverride ? '#FB923C' : (eff ? color : 'rgba(255,255,255,0.1)')}`,
+                        color: eff ? color : 'rgba(255,255,255,0.3)',
+                        fontSize: 12, fontWeight: 500, lineHeight: '20px',
+                        opacity: !eff ? 0.6 : 1,
+                        transition: 'all 0.12s',
+                      }}>
+                      <span style={{
+                        width: 12, height: 12, borderRadius: 3, flexShrink: 0,
+                        background: eff ? color : 'transparent',
+                        boxShadow: `inset 0 0 0 1.5px ${eff ? color : 'rgba(255,255,255,0.2)'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {eff && <Check size={8} color="#000" strokeWidth={3} />}
+                      </span>
                       {ACTION_LABELS[action] || action}
-                      {isOverride && <span style={{ fontSize: 9, marginLeft: 1 }}>↑</span>}
-                    </label>
+                      {isOverride && <span style={{ fontSize: 9, color: '#FB923C', fontWeight: 700, marginLeft: 1 }}>↑</span>}
+                    </button>
                   );
                 })}
               </div>
@@ -246,27 +268,32 @@ function GroupeForm({ initial, onSave, onClose }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
-        <div className="card-head">
-          <div className="card-title"><Shield size={16} style={{ color: '#A78BFA' }} /> {initial ? 'Modifier le groupe' : 'Nouveau groupe'}</div>
-          <button className="btn" onClick={onClose} style={{ padding: '7px 10px' }}><X size={16} /></button>
-        </div>
-        <div style={{ padding: '0 22px 22px' }}>
-          {err && <div className="banner banner-error" style={{ marginBottom: 14 }}>{err}</div>}
-          <div className="row-2" style={{ marginBottom: 16 }}>
+      <div className="modal" style={{ maxWidth: 700, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+        {/* Header fixe */}
+        <div style={{ padding: '18px 22px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="card-title"><Shield size={16} style={{ color: '#A78BFA' }} /> {initial ? 'Modifier le groupe' : 'Nouveau groupe'}</div>
+            <button className="btn" onClick={onClose} style={{ padding: '7px 10px' }}><X size={16} /></button>
+          </div>
+          {err && <div className="banner banner-error" style={{ marginTop: 10 }}>{err}</div>}
+          <div className="row-2" style={{ marginTop: 14 }}>
             <div className="field"><label>Nom du groupe</label>
               <input className="input" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex : Responsable Qualité" /></div>
             <div className="field"><label>Description</label>
               <input className="input" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description optionnelle" /></div>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+        </div>
+        {/* Matrice scrollable */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 22px' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
             Permissions par module et action
           </div>
           <PermMatrix permissions={perms} onChange={setPerms} />
-          <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
-            <button className="btn" onClick={onClose}>Annuler</button>
-            <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
-          </div>
+        </div>
+        {/* Footer fixe */}
+        <div style={{ padding: '12px 22px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+          <button className="btn" onClick={onClose}>Annuler</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
         </div>
       </div>
     </div>
@@ -317,12 +344,12 @@ function UserForm({ initial, groupes, onSave, onClose }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
-        <div className="card-head">
+      <div className="modal" style={{ maxWidth: 680, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: '16px 22px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div className="card-title"><Users size={16} style={{ color: '#60A5FA' }} /> {initial ? 'Modifier utilisateur' : 'Nouvel utilisateur'}</div>
           <button className="btn" onClick={onClose} style={{ padding: '7px 10px' }}><X size={16} /></button>
         </div>
-        <div style={{ padding: '0 22px 22px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px 22px' }}>
           {err && <div className="banner banner-error" style={{ marginBottom: 14 }}>{err}</div>}
 
           {/* Tabs */}
