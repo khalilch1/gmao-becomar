@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, X, Pencil, Trash2, Users, Settings } from 'lucide-react';
 import { api } from '../App.jsx';
 import { Loading, useFetch, FilterBar } from '../components/Common.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 function ParamModal({ title, list, placeholder, onSave, onClose }) {
   const [items, setItems] = useState([...list]);
@@ -54,6 +55,7 @@ function ParamModal({ title, list, placeholder, onSave, onClose }) {
 }
 
 export default function Collaborateurs() {
+  const { canDo } = useAuth();
   const [reloadP, setReloadP] = useState(0);
   const { data: paramsData } = useFetch(api.params, [reloadP]);
   const departements = paramsData?.departements ?? ['Direction', 'Administration', 'Production', 'Maintenance', 'Qualité', 'Logistique', 'Achats', 'Ressources Humaines', 'Finance'];
@@ -126,15 +128,21 @@ export default function Collaborateurs() {
           Gérez ici la liste du <b style={{ color: 'var(--text)' }}>personnel</b> pouvant être affecté aux ordres de travail et productions.
         </p>
         <div className="flex gap" style={{ gap: 8 }}>
-          <button className="btn" onClick={() => setShowParamDep(true)}>
-            <Settings size={15} /> Départements
-          </button>
-          <button className="btn" onClick={() => setShowParamFon(true)}>
-            <Settings size={15} /> Fonctions
-          </button>
-          <button className="btn btn-primary" onClick={openCreate}>
-            <Plus size={17} /> Nouveau collaborateur
-          </button>
+          {canDo('collaborateurs', 'manage_params') && (
+            <>
+              <button className="btn" onClick={() => setShowParamDep(true)}>
+                <Settings size={15} /> Départements
+              </button>
+              <button className="btn" onClick={() => setShowParamFon(true)}>
+                <Settings size={15} /> Fonctions
+              </button>
+            </>
+          )}
+          {canDo('collaborateurs', 'create') && (
+            <button className="btn btn-primary" onClick={openCreate}>
+              <Plus size={17} /> Nouveau collaborateur
+            </button>
+          )}
         </div>
       </div>
 
@@ -263,8 +271,8 @@ export default function Collaborateurs() {
                   <td>{c.fonction || '—'}</td>
                   <td>
                     <div className="flex gap" style={{ gap: 6 }}>
-                      <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(c)} title="Modifier"><Pencil size={14} /></button>
-                      <button className="btn" style={{ padding: '5px 8px', color: '#ef4444' }} onClick={() => remove(c)} title="Supprimer"><Trash2 size={14} /></button>
+                      {canDo('collaborateurs', 'edit') && <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(c)} title="Modifier"><Pencil size={14} /></button>}
+                      {canDo('collaborateurs', 'delete') && <button className="btn" style={{ padding: '5px 8px', color: '#ef4444' }} onClick={() => remove(c)} title="Supprimer"><Trash2 size={14} /></button>}
                     </div>
                   </td>
                 </tr>

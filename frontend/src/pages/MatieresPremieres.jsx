@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, X, Pencil, ArrowDownToLine, ArrowUpFromLine, Trash2, History, Settings } from 'lucide-react';
 import { api, dh, num } from '../App.jsx';
 import { Loading, Pill, useFetch, KpiSimple as KpiCard, FilterBar } from '../components/Common.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const UNITES = ['kg', 'T', 'm³', 'm²', 'ml', 'L', 'rouleau', 'pc', 'sac', 'fût'];
 const MOTIFS_ENTREE = ['Réception fournisseur', 'Retour production', 'Ajustement inventaire', 'Régularisation'];
@@ -60,6 +61,7 @@ function ParamModal({ title, list, onSave, onClose }) {
 const EMPTY = { ref: '', designation: '', description: '', categorie: '', unite: 'm³', cout_unitaire: 0, stock_min: 0, photo: '' };
 
 export default function MatieresPremieres() {
+  const { canDo } = useAuth();
   const [reloadP, setReloadP] = useState(0);
   const { data: paramsData } = useFetch(api.params, [reloadP]);
   const categories = paramsData?.mp_categories ?? ['Bois brut', 'Adhésifs', 'Consommables', 'Métaux', 'Emballages', 'Produits chimiques', 'Autre'];
@@ -158,12 +160,16 @@ export default function MatieresPremieres() {
           Gestion des <b style={{ color: 'var(--text)' }}>matières premières</b>. Le stock diminue automatiquement à chaque saisie de production.
         </p>
         <div className="flex gap" style={{ gap: 8 }}>
-          <button className="btn" onClick={() => setShowParam(true)}>
-            <Settings size={15} /> Catégories
-          </button>
-          <button className="btn btn-primary" onClick={() => { setOpen(true); setErr(''); setForm({ ...EMPTY, categorie: categories[0] || '' }); }}>
-            <Plus size={17} /> Nouvelle matière
-          </button>
+          {canDo('matieres', 'manage_categories') && (
+            <button className="btn" onClick={() => setShowParam(true)}>
+              <Settings size={15} /> Catégories
+            </button>
+          )}
+          {canDo('matieres', 'create') && (
+            <button className="btn btn-primary" onClick={() => { setOpen(true); setErr(''); setForm({ ...EMPTY, categorie: categories[0] || '' }); }}>
+              <Plus size={17} /> Nouvelle matière
+            </button>
+          )}
         </div>
       </div>
 
@@ -405,10 +411,10 @@ export default function MatieresPremieres() {
                   <td className="mono muted">{num(+m.received.toFixed(2))} {m.unite}</td>
                   <td>
                     <div className="flex gap" style={{ gap: 5 }}>
-                      <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(m)} title="Modifier"><Pencil size={13} /></button>
-                      <button className="btn" style={{ padding: '5px 8px', color: 'var(--teal)' }} onClick={() => openMv(m)} title="Réception / mouvement"><ArrowDownToLine size={13} /></button>
-                      <button className="btn" style={{ padding: '5px 8px', color: '#A78BFA' }} onClick={() => openHist(m)} title="Historique"><History size={13} /></button>
-                      <button className="btn" style={{ padding: '5px 8px', color: '#ef4444' }} onClick={() => deleteMatiere(m)} title="Supprimer"><Trash2 size={13} /></button>
+                      {canDo('matieres', 'edit') && <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(m)} title="Modifier"><Pencil size={13} /></button>}
+                      {canDo('matieres', 'add_movement') && <button className="btn" style={{ padding: '5px 8px', color: 'var(--teal)' }} onClick={() => openMv(m)} title="Réception / mouvement"><ArrowDownToLine size={13} /></button>}
+                      {canDo('matieres', 'view_history') && <button className="btn" style={{ padding: '5px 8px', color: '#A78BFA' }} onClick={() => openHist(m)} title="Historique"><History size={13} /></button>}
+                      {canDo('matieres', 'delete') && <button className="btn" style={{ padding: '5px 8px', color: '#ef4444' }} onClick={() => deleteMatiere(m)} title="Supprimer"><Trash2 size={13} /></button>}
                     </div>
                   </td>
                 </tr>

@@ -38,23 +38,96 @@ const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'gmao-becomar-secret-2026';
 
 // =============================================================
-//  MODULES & GROUPES / UTILISATEURS
+//  MODULES ACTIONS & PERMISSIONS GRANULAIRES
 // =============================================================
-const ALL_MODULES = ['dashboard','workorders','machines','parts','movements','analytics','timetracking','production','collaborateurs','articles','matieres','users'];
-const WRITE_ALL = Object.fromEntries(ALL_MODULES.map((m) => [m, 'write']));
-const READ_ALL  = Object.fromEntries(ALL_MODULES.map((m) => [m, m === 'users' ? 'none' : 'read']));
+const MODULES_ACTIONS = {
+  dashboard:      ['view'],
+  workorders:     ['view', 'create', 'edit', 'delete', 'add_parts'],
+  machines:       ['view'],
+  parts:          ['view', 'create', 'edit', 'add_movement'],
+  movements:      ['view', 'create'],
+  analytics:      ['view'],
+  timetracking:   ['view', 'create', 'edit'],
+  production:     ['view', 'create', 'edit', 'delete'],
+  collaborateurs: ['view', 'create', 'edit', 'delete', 'manage_params'],
+  articles:       ['view', 'create', 'edit', 'delete', 'add_movement', 'view_history', 'manage_categories'],
+  matieres:       ['view', 'create', 'edit', 'delete', 'add_movement', 'view_history', 'manage_categories'],
+  users:          ['view', 'create_user', 'edit_user', 'delete_user', 'manage_groups'],
+};
+const ALL_MODULES = Object.keys(MODULES_ACTIONS);
+
+function modulePerms(mod, value) {
+  return Object.fromEntries(MODULES_ACTIONS[mod].map((a) => [a, value]));
+}
+function makePerms(config) {
+  const result = {};
+  for (const mod of ALL_MODULES) {
+    const v = config[mod];
+    if (v === true) result[mod] = modulePerms(mod, true);
+    else if (!v || v === false) result[mod] = modulePerms(mod, false);
+    else result[mod] = { ...modulePerms(mod, false), ...v };
+  }
+  return result;
+}
+function computeEffectivePerms(groupPerms, userOverrides) {
+  const result = {};
+  for (const mod of ALL_MODULES) {
+    result[mod] = { ...(groupPerms[mod] || modulePerms(mod, false)), ...(userOverrides?.[mod] || {}) };
+  }
+  return result;
+}
 
 let groupes = [
-  { id: 'GRP-001', nom: 'Administrateur', description: 'Accès complet à toutes les fonctionnalités', permissions: { ...WRITE_ALL } },
-  { id: 'GRP-002', nom: 'Responsable Maintenance', description: 'Gestion complète de la maintenance', permissions: { dashboard: 'read', workorders: 'write', machines: 'write', parts: 'write', movements: 'write', analytics: 'read', timetracking: 'read', production: 'read', collaborateurs: 'write', articles: 'none', matieres: 'none', users: 'none' } },
-  { id: 'GRP-003', nom: 'Opérateur Production', description: 'Saisie production et consultation', permissions: { dashboard: 'read', workorders: 'none', machines: 'read', parts: 'none', movements: 'none', analytics: 'read', timetracking: 'none', production: 'write', collaborateurs: 'none', articles: 'read', matieres: 'read', users: 'none' } },
-  { id: 'GRP-004', nom: 'Magasinier', description: 'Gestion des stocks et pièces', permissions: { dashboard: 'read', workorders: 'read', machines: 'none', parts: 'write', movements: 'write', analytics: 'none', timetracking: 'none', production: 'none', collaborateurs: 'none', articles: 'write', matieres: 'write', users: 'none' } },
-  { id: 'GRP-005', nom: 'Consultation', description: 'Accès lecture seule sur tous les modules', permissions: { ...READ_ALL } },
+  {
+    id: 'GRP-001', nom: 'Administrateur',
+    description: 'Accès complet à toutes les fonctionnalités',
+    permissions: makePerms(Object.fromEntries(ALL_MODULES.map((m) => [m, true]))),
+  },
+  {
+    id: 'GRP-002', nom: 'Responsable Maintenance',
+    description: 'Gestion complète de la maintenance',
+    permissions: makePerms({
+      dashboard: { view: true }, workorders: { view: true, create: true, edit: true, delete: true, add_parts: true },
+      machines: { view: true }, parts: { view: true, create: true, edit: true, add_movement: true },
+      movements: { view: true, create: true }, analytics: { view: true },
+      timetracking: { view: true, create: true, edit: true }, production: { view: true },
+      collaborateurs: { view: true, create: true, edit: true, delete: true, manage_params: true },
+      articles: false, matieres: false, users: false,
+    }),
+  },
+  {
+    id: 'GRP-003', nom: 'Opérateur Production',
+    description: 'Saisie production et consultation',
+    permissions: makePerms({
+      dashboard: { view: true }, workorders: { view: true }, machines: { view: true },
+      parts: false, movements: false, analytics: { view: true }, timetracking: false,
+      production: { view: true, create: true, edit: true }, collaborateurs: false,
+      articles: { view: true }, matieres: { view: true }, users: false,
+    }),
+  },
+  {
+    id: 'GRP-004', nom: 'Magasinier',
+    description: 'Gestion des stocks et pièces',
+    permissions: makePerms({
+      dashboard: { view: true }, workorders: { view: true }, machines: false,
+      parts: { view: true, create: true, edit: true, add_movement: true },
+      movements: { view: true, create: true }, analytics: false, timetracking: false,
+      production: false, collaborateurs: false,
+      articles: { view: true, create: true, edit: true, delete: true, add_movement: true, view_history: true, manage_categories: true },
+      matieres: { view: true, create: true, edit: true, delete: true, add_movement: true, view_history: true, manage_categories: true },
+      users: false,
+    }),
+  },
+  {
+    id: 'GRP-005', nom: 'Consultation',
+    description: 'Accès lecture seule sur tous les modules',
+    permissions: makePerms(Object.fromEntries(ALL_MODULES.map((m) => [m, m === 'users' ? false : { view: true }]))),
+  },
 ];
 let grpSeq = groupes.length + 1;
 
 let users = [
-  { id: 'USR-001', username: 'admin', password_hash: bcrypt.hashSync('Admin123!', 10), nom: 'Administrateur', prenom: 'Système', email: 'admin@becomar.ma', groupe_id: 'GRP-001', actif: true },
+  { id: 'USR-001', username: 'admin', password_hash: bcrypt.hashSync('Admin123!', 10), nom: 'Administrateur', prenom: 'Système', email: 'admin@becomar.ma', groupe_id: 'GRP-001', actif: true, overrides: {} },
 ];
 let usrSeq = users.length + 1;
 
@@ -70,14 +143,17 @@ function authMiddleware(req, res, next) {
   }
 }
 function adminMiddleware(req, res, next) {
-  const grp = groupes.find((g) => g.id === req.user?.groupe_id);
-  if (!grp || grp.permissions.users !== 'write') return res.status(403).json({ error: 'Accès réservé aux administrateurs' });
+  const u = users.find((u) => u.id === req.user?.id);
+  const grp = groupes.find((g) => g.id === u?.groupe_id);
+  const eff = computeEffectivePerms(grp?.permissions || {}, u?.overrides || {});
+  if (!eff.users?.view) return res.status(403).json({ error: 'Accès réservé aux administrateurs' });
   next();
 }
 function userView(u) {
   const { password_hash, ...safe } = u;
   const grp = groupes.find((g) => g.id === u.groupe_id);
-  return { ...safe, groupe_nom: grp?.nom || '—', permissions: grp?.permissions || {} };
+  const effectivePerms = computeEffectivePerms(grp?.permissions || {}, u.overrides || {});
+  return { ...safe, groupe_nom: grp?.nom || '—', permissions: effectivePerms, group_permissions: grp?.permissions || {} };
 }
 
 // =============================================================
@@ -98,6 +174,8 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json(userView(user));
 });
 
+app.get('/api/modules-actions', authMiddleware, (req, res) => res.json(MODULES_ACTIONS));
+
 // =============================================================
 //  GESTION UTILISATEURS (admin)
 // =============================================================
@@ -109,7 +187,7 @@ app.post('/api/users', authMiddleware, adminMiddleware, (req, res) => {
   if (users.find((u) => u.username === b.username)) return res.status(400).json({ error: "Nom d'utilisateur déjà utilisé" });
   const grp = groupes.find((g) => g.id === b.groupe_id);
   if (!grp) return res.status(400).json({ error: 'Groupe invalide' });
-  const u = { id: `USR-${String(usrSeq++).padStart(3, '0')}`, username: b.username.trim(), password_hash: bcrypt.hashSync(b.password, 10), nom: b.nom || '', prenom: b.prenom || '', email: b.email || '', groupe_id: b.groupe_id, actif: b.actif !== false };
+  const u = { id: `USR-${String(usrSeq++).padStart(3, '0')}`, username: b.username.trim(), password_hash: bcrypt.hashSync(b.password, 10), nom: b.nom || '', prenom: b.prenom || '', email: b.email || '', groupe_id: b.groupe_id, actif: b.actif !== false, overrides: b.overrides || {} };
   users.push(u);
   res.status(201).json(userView(u));
 });
@@ -127,6 +205,7 @@ app.put('/api/users/:id', authMiddleware, adminMiddleware, (req, res) => {
   if (b.groupe_id !== undefined) u.groupe_id = b.groupe_id;
   if (b.actif !== undefined) u.actif = b.actif;
   if (b.password?.trim()) u.password_hash = bcrypt.hashSync(b.password, 10);
+  if (b.overrides !== undefined) u.overrides = b.overrides;
   res.json(userView(u));
 });
 
@@ -146,9 +225,7 @@ app.get('/api/groupes', authMiddleware, (req, res) => res.json(groupes));
 app.post('/api/groupes', authMiddleware, adminMiddleware, (req, res) => {
   const b = req.body || {};
   if (!b.nom?.trim()) return res.status(400).json({ error: 'Nom du groupe requis' });
-  const perms = {};
-  ALL_MODULES.forEach((m) => { perms[m] = ['none','read','write'].includes(b.permissions?.[m]) ? b.permissions[m] : 'none'; });
-  const grp = { id: `GRP-${String(grpSeq++).padStart(3, '0')}`, nom: b.nom.trim(), description: b.description || '', permissions: perms };
+  const grp = { id: `GRP-${String(grpSeq++).padStart(3, '0')}`, nom: b.nom.trim(), description: b.description || '', permissions: makePerms(b.permissions || {}) };
   groupes.push(grp);
   res.status(201).json(grp);
 });
@@ -159,7 +236,7 @@ app.put('/api/groupes/:id', authMiddleware, adminMiddleware, (req, res) => {
   const b = req.body || {};
   if (b.nom !== undefined) grp.nom = b.nom.trim();
   if (b.description !== undefined) grp.description = b.description;
-  if (b.permissions) ALL_MODULES.forEach((m) => { if (['none','read','write'].includes(b.permissions[m])) grp.permissions[m] = b.permissions[m]; });
+  if (b.permissions !== undefined) grp.permissions = makePerms(b.permissions);
   res.json(grp);
 });
 

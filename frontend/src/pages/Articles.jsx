@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, X, Pencil, Package, ArrowUpFromLine, ArrowDownToLine, Trash2, History, Settings } from 'lucide-react';
 import { api, dh, num } from '../App.jsx';
 import { Loading, Pill, useFetch, KpiSimple as KpiCard, FilterBar } from '../components/Common.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const UNITES = ['ml', 'm²', 'm³', 'pc', 'kg', 'T', 'palette'];
 const MOTIFS_SORTIE = ['Expédition client', 'Rebut', 'Ajustement inventaire', 'Don / Échantillon'];
@@ -60,6 +61,7 @@ function ParamModal({ title, list, onSave, onClose }) {
 const EMPTY = { ref: '', designation: '', description: '', categorie: '', unite: 'ml', cout_unitaire: 0, stock_min: 0, photo: '' };
 
 export default function Articles() {
+  const { canDo } = useAuth();
   const [reloadP, setReloadP] = useState(0);
   const { data: paramsData } = useFetch(api.params, [reloadP]);
   const categories = paramsData?.art_categories ?? ['Planches', 'Panneaux', 'Charpente', 'Ossature', 'Finition', 'Autre'];
@@ -158,12 +160,16 @@ export default function Articles() {
           Catalogue des <b style={{ color: 'var(--text)' }}>produits finis</b>. Le stock est mis à jour automatiquement à chaque production.
         </p>
         <div className="flex gap" style={{ gap: 8 }}>
-          <button className="btn" onClick={() => setShowParam(true)}>
-            <Settings size={15} /> Catégories
-          </button>
-          <button className="btn btn-primary" onClick={() => { setOpen(true); setErr(''); setForm({ ...EMPTY, categorie: categories[0] || '' }); }}>
-            <Plus size={17} /> Nouvel article
-          </button>
+          {canDo('articles', 'manage_categories') && (
+            <button className="btn" onClick={() => setShowParam(true)}>
+              <Settings size={15} /> Catégories
+            </button>
+          )}
+          {canDo('articles', 'create') && (
+            <button className="btn btn-primary" onClick={() => { setOpen(true); setErr(''); setForm({ ...EMPTY, categorie: categories[0] || '' }); }}>
+              <Plus size={17} /> Nouvel article
+            </button>
+          )}
         </div>
       </div>
 
@@ -405,10 +411,10 @@ export default function Articles() {
                   <td className="mono muted">{num(a.shipped)} {a.unite}</td>
                   <td>
                     <div className="flex gap" style={{ gap: 5 }}>
-                      <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(a)} title="Modifier"><Pencil size={13} /></button>
-                      <button className="btn" style={{ padding: '5px 8px', color: 'var(--teal)' }} onClick={() => openMv(a)} title="Mouvement stock"><ArrowUpFromLine size={13} /></button>
-                      <button className="btn" style={{ padding: '5px 8px', color: '#A78BFA' }} onClick={() => openHist(a)} title="Historique"><History size={13} /></button>
-                      <button className="btn" style={{ padding: '5px 8px', color: '#ef4444' }} onClick={() => deleteArticle(a)} title="Supprimer"><Trash2 size={13} /></button>
+                      {canDo('articles', 'edit') && <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(a)} title="Modifier"><Pencil size={13} /></button>}
+                      {canDo('articles', 'add_movement') && <button className="btn" style={{ padding: '5px 8px', color: 'var(--teal)' }} onClick={() => openMv(a)} title="Mouvement stock"><ArrowUpFromLine size={13} /></button>}
+                      {canDo('articles', 'view_history') && <button className="btn" style={{ padding: '5px 8px', color: '#A78BFA' }} onClick={() => openHist(a)} title="Historique"><History size={13} /></button>}
+                      {canDo('articles', 'delete') && <button className="btn" style={{ padding: '5px 8px', color: '#ef4444' }} onClick={() => deleteArticle(a)} title="Supprimer"><Trash2 size={13} /></button>}
                     </div>
                   </td>
                 </tr>

@@ -36,13 +36,19 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  // perm(module) → 'none' | 'read' | 'write'
-  const perm = (module) => user?.permissions?.[module] || 'none';
-  const canRead  = (module) => ['read', 'write'].includes(perm(module));
-  const canWrite = (module) => perm(module) === 'write';
+  // canDo(module, action) → bool — granular permission check
+  const canDo = (module, action) => user?.permissions?.[module]?.[action] === true;
+  // canRead = can view the module (backward compat for nav/routing)
+  const canRead = (module) => canDo(module, 'view');
+  // canWrite = has at least one non-view action
+  const canWrite = (module) => {
+    const actions = user?.permissions?.[module];
+    if (!actions) return false;
+    return Object.entries(actions).some(([k, v]) => k !== 'view' && v === true);
+  };
 
   return (
-    <Ctx.Provider value={{ user, ready, login, logout, perm, canRead, canWrite }}>
+    <Ctx.Provider value={{ user, ready, login, logout, canDo, canRead, canWrite }}>
       {children}
     </Ctx.Provider>
   );

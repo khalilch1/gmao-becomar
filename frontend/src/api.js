@@ -88,4 +88,6 @@ export const api = {
   // Paramètres (catégories, départements, fonctions)
   params: () => get('/params'),
   updateParam: (key, values) => put(`/params/${key}`, { values }),
+  // Modules & actions (pour la gestion des droits)
+  modulesActions: () => get('/modules-actions'),
 };
