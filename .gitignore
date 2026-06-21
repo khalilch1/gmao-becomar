@@ -66,3 +66,7 @@ certs/
 # Docker
 .docker/
 docker-compose.override.yml
+
+# Uploaded files
+backend/uploads/*
+!backend/uploads/.gitkeep

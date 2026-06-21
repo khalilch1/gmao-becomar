@@ -5,6 +5,9 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const {
   LABOR_RATE,
   units,
@@ -33,6 +36,28 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+
+// Uploads statiques
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Multer — stockage sur disque, nommage unique
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 Mo max
+  fileFilter: (req, file, cb) => {
+    const ok = /^image\/(jpeg|png|gif|webp)$/.test(file.mimetype);
+    cb(ok ? null : new Error('Fichier non supporté'), ok);
+  },
+});
 
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'gmao-becomar-secret-2026';
@@ -675,7 +700,7 @@ app.post('/api/articles', (req, res) => {
   const b = req.body || {};
   if (!b.ref || !b.designation) return res.status(400).json({ error: 'ref et designation requis' });
   if (articlesMeta.find((a) => a.ref === b.ref)) return res.status(400).json({ error: 'Référence déjà existante' });
-  const art = { ref: String(b.ref).toUpperCase(), designation: String(b.designation), description: b.description || '', categorie: b.categorie || '', unite: b.unite || 'pc', cout_unitaire: Number(b.cout_unitaire) || 0, stock_min: Number(b.stock_min) || 0, photo: b.photo || null, target: 0 };
+  const art = { ref: String(b.ref).toUpperCase(), designation: String(b.designation), description: b.description || '', categorie: b.categorie || '', unite: b.unite || 'pc', cout_unitaire: Number(b.cout_unitaire) || 0, stock_min: Number(b.stock_min) || 0, photos: [], target: 0 };
   articlesMeta.push(art);
   articlesStock[art.ref] = 0;
   res.status(201).json(articleView(art));
@@ -685,10 +710,31 @@ app.put('/api/articles/:ref', (req, res) => {
   const a = articlesMeta.find((x) => x.ref === req.params.ref);
   if (!a) return res.status(404).json({ error: 'Article introuvable' });
   const b = req.body || {};
-  ['designation', 'description', 'categorie', 'unite', 'photo'].forEach((k) => { if (b[k] !== undefined) a[k] = b[k]; });
+  ['designation', 'description', 'categorie', 'unite'].forEach((k) => { if (b[k] !== undefined) a[k] = b[k]; });
   if (b.cout_unitaire !== undefined) a.cout_unitaire = Number(b.cout_unitaire) || 0;
   if (b.stock_min !== undefined) a.stock_min = Number(b.stock_min) || 0;
   res.json(articleView(a));
+});
+
+// Upload photo article
+app.post('/api/articles/:ref/photos', upload.single('photo'), (req, res) => {
+  const a = articlesMeta.find((x) => x.ref === req.params.ref);
+  if (!a) return res.status(404).json({ error: 'Article introuvable' });
+  if (!req.file) return res.status(400).json({ error: 'Fichier manquant' });
+  if (!a.photos) a.photos = [];
+  a.photos.push(req.file.filename);
+  res.status(201).json({ filename: req.file.filename, photos: a.photos });
+});
+
+// Supprimer photo article
+app.delete('/api/articles/:ref/photos/:filename', (req, res) => {
+  const a = articlesMeta.find((x) => x.ref === req.params.ref);
+  if (!a) return res.status(404).json({ error: 'Article introuvable' });
+  const { filename } = req.params;
+  a.photos = (a.photos || []).filter((f) => f !== filename);
+  const filePath = path.join(UPLOADS_DIR, filename);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  res.json({ ok: true, photos: a.photos });
 });
 
 app.delete('/api/articles/:ref', (req, res) => {
@@ -738,7 +784,7 @@ app.post('/api/matieres', (req, res) => {
   const b = req.body || {};
   if (!b.ref || !b.designation) return res.status(400).json({ error: 'ref et designation requis' });
   if (matieresMeta.find((m) => m.ref === b.ref)) return res.status(400).json({ error: 'Référence déjà existante' });
-  const mat = { ref: String(b.ref).toUpperCase(), designation: String(b.designation), description: b.description || '', categorie: b.categorie || '', unite: b.unite || 'kg', cout_unitaire: Number(b.cout_unitaire) || 0, stock_min: Number(b.stock_min) || 0, photo: b.photo || null, target: 0 };
+  const mat = { ref: String(b.ref).toUpperCase(), designation: String(b.designation), description: b.description || '', categorie: b.categorie || '', unite: b.unite || 'kg', cout_unitaire: Number(b.cout_unitaire) || 0, stock_min: Number(b.stock_min) || 0, photos: [], target: 0 };
   matieresMeta.push(mat);
   matieresStock[mat.ref] = 0;
   res.status(201).json(matiereView(mat));
@@ -748,10 +794,31 @@ app.put('/api/matieres/:ref', (req, res) => {
   const m = matieresMeta.find((x) => x.ref === req.params.ref);
   if (!m) return res.status(404).json({ error: 'Matière introuvable' });
   const b = req.body || {};
-  ['designation', 'description', 'categorie', 'unite', 'photo'].forEach((k) => { if (b[k] !== undefined) m[k] = b[k]; });
+  ['designation', 'description', 'categorie', 'unite'].forEach((k) => { if (b[k] !== undefined) m[k] = b[k]; });
   if (b.cout_unitaire !== undefined) m.cout_unitaire = Number(b.cout_unitaire) || 0;
   if (b.stock_min !== undefined) m.stock_min = Number(b.stock_min) || 0;
   res.json(matiereView(m));
+});
+
+// Upload photo matière
+app.post('/api/matieres/:ref/photos', upload.single('photo'), (req, res) => {
+  const m = matieresMeta.find((x) => x.ref === req.params.ref);
+  if (!m) return res.status(404).json({ error: 'Matière introuvable' });
+  if (!req.file) return res.status(400).json({ error: 'Fichier manquant' });
+  if (!m.photos) m.photos = [];
+  m.photos.push(req.file.filename);
+  res.status(201).json({ filename: req.file.filename, photos: m.photos });
+});
+
+// Supprimer photo matière
+app.delete('/api/matieres/:ref/photos/:filename', (req, res) => {
+  const m = matieresMeta.find((x) => x.ref === req.params.ref);
+  if (!m) return res.status(404).json({ error: 'Matière introuvable' });
+  const { filename } = req.params;
+  m.photos = (m.photos || []).filter((f) => f !== filename);
+  const filePath = path.join(UPLOADS_DIR, filename);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  res.json({ ok: true, photos: m.photos });
 });
 
 app.delete('/api/matieres/:ref', (req, res) => {

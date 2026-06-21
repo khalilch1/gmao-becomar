@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { api, dh, num } from '../App.jsx';
 import { Loading, Pill, KpiCard, useFetch, FilterBar } from '../components/Common.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const MOTIFS = {
   Entrée: ['Réception fournisseur', 'Retour atelier', 'Ajustement inventaire', 'Régularisation'],
@@ -14,6 +15,7 @@ const MOTIFS = {
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function StockMovements() {
+  const { canDo } = useAuth();
   const { data: parts } = useFetch(api.parts);
   const [movements, setMovements] = useState(null);
   const [showNewMove, setShowNewMove] = useState(false);
@@ -79,12 +81,14 @@ export default function StockMovements() {
             <div className="card-title">Créer un mouvement de stock</div>
             <span className="card-hint">Enregistrer une entrée ou sortie de pièces</span>
           </div>
-          <button className="btn btn-primary" style={{ gap: 8 }} onClick={() => setShowNewMove(true)}>
-            <Plus size={16} /> Nouveau mouvement
-          </button>
+          {canDo('movements', 'create') && (
+            <button className="btn btn-primary" style={{ gap: 8 }} onClick={() => setShowNewMove(true)}>
+              <Plus size={16} /> Nouveau mouvement
+            </button>
+          )}
         </div>
 
-        {showNewMove && (
+        {showNewMove && canDo('movements', 'create') && (
           <NewMovementForm
             parts={parts}
             onClose={() => setShowNewMove(false)}

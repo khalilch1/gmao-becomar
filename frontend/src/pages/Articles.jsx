@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Plus, X, Pencil, Package, ArrowUpFromLine, ArrowDownToLine, Trash2, History, Settings } from 'lucide-react';
+import { Plus, X, Pencil, Eye, Package, ArrowUpFromLine, ArrowDownToLine, Trash2, History, Settings } from 'lucide-react';
 import { api, dh, num } from '../App.jsx';
 import { Loading, Pill, useFetch, KpiSimple as KpiCard, FilterBar } from '../components/Common.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import PhotoManager, { PhotoBadge } from '../components/PhotoManager.jsx';
 
 const UNITES = ['ml', 'm²', 'm³', 'pc', 'kg', 'T', 'palette'];
 const MOTIFS_SORTIE = ['Expédition client', 'Rebut', 'Ajustement inventaire', 'Don / Échantillon'];
@@ -96,7 +97,18 @@ export default function Articles() {
     finally { setSaving(false); }
   };
 
-  const openEdit = (a) => { setEditing(a); setEditForm({ ...a }); setErr(''); };
+  const openEdit = (a) => { setEditing(a); setEditForm({ ...a, photos: a.photos || [] }); setErr(''); };
+
+  const uploadPhoto = async (file) => {
+    const res = await api.uploadArticlePhoto(editing.ref, file);
+    setEditForm((f) => ({ ...f, photos: res.photos || [] }));
+    refresh();
+  };
+  const deletePhoto = async (filename) => {
+    const res = await api.deleteArticlePhoto(editing.ref, filename);
+    setEditForm((f) => ({ ...f, photos: res.photos || [] }));
+    refresh();
+  };
   const submitEdit = async () => {
     setSaving(true); setErr('');
     try { await api.updateArticle(editing.ref, editForm); setEditing(null); refresh(); }
@@ -189,88 +201,42 @@ export default function Articles() {
       )}
 
       {open && (
-        <div className="card" style={{ marginBottom: 18, borderColor: 'var(--accent)' }}>
-          <div className="card-head">
-            <div className="card-title">Nouvel article</div>
-            <button className="btn" onClick={() => setOpen(false)} style={{ padding: '7px 10px' }}><X size={16} /></button>
-          </div>
-          {err && <div className="banner banner-error">{err}</div>}
-          <div className="row-2">
-            <div className="field"><label>Référence</label>
-              <input className="input mono" value={form.ref} onChange={set('ref')} placeholder="ART-XXX-00" /></div>
-            <div className="field"><label>Catégorie</label>
-              <select className="select" value={form.categorie} onChange={set('categorie')}>
-                {categories.map((c) => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="field"><label>Désignation</label>
-            <input className="input" value={form.designation} onChange={set('designation')} placeholder="Ex : Planche rabotée 22mm" /></div>
-          <div className="field"><label>Description</label>
-            <input className="input" value={form.description} onChange={set('description')} placeholder="Détails techniques..." /></div>
-          <div className="row-2">
-            <div className="field"><label>Unité</label>
-              <select className="select" value={form.unite} onChange={set('unite')}>
-                {UNITES.map((u) => <option key={u}>{u}</option>)}
-              </select>
-            </div>
-            <div className="field"><label>Coût unitaire (DH)</label>
-              <input className="input mono" type="number" min="0" step="0.01" value={form.cout_unitaire} onChange={set('cout_unitaire')} /></div>
-          </div>
-          <div className="row-2">
-            <div className="field"><label>Stock minimum</label>
-              <input className="input mono" type="number" min="0" value={form.stock_min} onChange={set('stock_min')} /></div>
-            <div className="field"><label>Photo (URL)</label>
-              <input className="input" value={form.photo} onChange={set('photo')} placeholder="https://..." /></div>
-          </div>
-          <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
-            <button className="btn" onClick={() => setOpen(false)}>Annuler</button>
-            <button className="btn btn-primary" onClick={submit} disabled={saving}>
-              <Package size={16} /> {saving ? 'Enregistrement…' : 'Créer article'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {editing && (
-        <div className="overlay" onClick={() => setEditing(null)}>
+        <div className="overlay" onClick={() => setOpen(false)}>
           <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <div className="card-head">
-              <div className="card-title">Modifier — {editing.ref}</div>
-              <button className="btn" onClick={() => setEditing(null)} style={{ padding: '7px 10px' }}><X size={16} /></button>
+              <div className="card-title">Nouvel article</div>
+              <button className="btn" onClick={() => setOpen(false)} style={{ padding: '7px 10px' }}><X size={16} /></button>
             </div>
             {err && <div className="banner banner-error" style={{ margin: '0 22px' }}>{err}</div>}
             <div style={{ padding: '16px 22px 22px' }}>
               <div className="row-2">
-                <div className="field"><label>Désignation</label>
-                  <input className="input" value={editForm.designation} onChange={setE('designation')} /></div>
+                <div className="field"><label>Référence</label>
+                  <input className="input mono" value={form.ref} onChange={set('ref')} placeholder="ART-XXX-00" /></div>
                 <div className="field"><label>Catégorie</label>
-                  <select className="select" value={editForm.categorie} onChange={setE('categorie')}>
+                  <select className="select" value={form.categorie} onChange={set('categorie')}>
                     {categories.map((c) => <option key={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
+              <div className="field"><label>Désignation</label>
+                <input className="input" value={form.designation} onChange={set('designation')} placeholder="Ex : Planche rabotée 22mm" /></div>
               <div className="field"><label>Description</label>
-                <input className="input" value={editForm.description || ''} onChange={setE('description')} /></div>
+                <input className="input" value={form.description} onChange={set('description')} placeholder="Détails techniques..." /></div>
               <div className="row-2">
                 <div className="field"><label>Unité</label>
-                  <select className="select" value={editForm.unite} onChange={setE('unite')}>
+                  <select className="select" value={form.unite} onChange={set('unite')}>
                     {UNITES.map((u) => <option key={u}>{u}</option>)}
                   </select>
                 </div>
                 <div className="field"><label>Coût unitaire (DH)</label>
-                  <input className="input mono" type="number" min="0" step="0.01" value={editForm.cout_unitaire} onChange={setE('cout_unitaire')} /></div>
+                  <input className="input mono" type="number" min="0" step="0.01" value={form.cout_unitaire} onChange={set('cout_unitaire')} /></div>
               </div>
-              <div className="row-2">
-                <div className="field"><label>Stock minimum</label>
-                  <input className="input mono" type="number" min="0" value={editForm.stock_min} onChange={setE('stock_min')} /></div>
-                <div className="field"><label>Photo (URL)</label>
-                  <input className="input" value={editForm.photo || ''} onChange={setE('photo')} /></div>
-              </div>
-              <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
-                <button className="btn" onClick={() => setEditing(null)}>Annuler</button>
-                <button className="btn btn-primary" onClick={submitEdit} disabled={saving}>
-                  {saving ? 'Enregistrement…' : 'Enregistrer'}
+              <div className="field"><label>Stock minimum</label>
+                <input className="input mono" type="number" min="0" value={form.stock_min} onChange={set('stock_min')} /></div>
+              <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+                <button className="btn" onClick={() => setOpen(false)}>Annuler</button>
+                <button className="btn btn-primary" onClick={submit} disabled={saving}>
+                  <Package size={16} /> {saving ? 'Enregistrement…' : 'Créer article'}
                 </button>
               </div>
             </div>
@@ -278,7 +244,62 @@ export default function Articles() {
         </div>
       )}
 
-      {mvArt && (
+      {editing && (() => {
+        const ro = !canDo('articles', 'edit');
+        return (
+          <div className="overlay" onClick={() => setEditing(null)}>
+            <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+              <div className="card-head">
+                <div className="card-title">{ro ? 'Consulter' : 'Modifier'} — {editing.ref}</div>
+                <button className="btn" onClick={() => setEditing(null)} style={{ padding: '7px 10px' }}><X size={16} /></button>
+              </div>
+              {err && <div className="banner banner-error" style={{ margin: '0 22px' }}>{err}</div>}
+              <div style={{ padding: '16px 22px 22px' }}>
+                <div className="row-2">
+                  <div className="field"><label>Désignation</label>
+                    <input className="input" value={editForm.designation} onChange={setE('designation')} disabled={ro} /></div>
+                  <div className="field"><label>Catégorie</label>
+                    <select className="select" value={editForm.categorie} onChange={setE('categorie')} disabled={ro}>
+                      {categories.map((c) => <option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="field"><label>Description</label>
+                  <input className="input" value={editForm.description || ''} onChange={setE('description')} disabled={ro} /></div>
+                <div className="row-2">
+                  <div className="field"><label>Unité</label>
+                    <select className="select" value={editForm.unite} onChange={setE('unite')} disabled={ro}>
+                      {UNITES.map((u) => <option key={u}>{u}</option>)}
+                    </select>
+                  </div>
+                  <div className="field"><label>Coût unitaire (DH)</label>
+                    <input className="input mono" type="number" min="0" step="0.01" value={editForm.cout_unitaire} onChange={setE('cout_unitaire')} disabled={ro} /></div>
+                </div>
+                <div className="field"><label>Stock minimum</label>
+                  <input className="input mono" type="number" min="0" value={editForm.stock_min} onChange={setE('stock_min')} disabled={ro} /></div>
+                <div style={{ marginTop: 14 }}>
+                  <PhotoManager
+                    photos={editForm.photos || []}
+                    onUpload={uploadPhoto}
+                    onDelete={deletePhoto}
+                    readOnly={ro}
+                  />
+                </div>
+                <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 14 }}>
+                  <button className="btn" onClick={() => setEditing(null)}>{ro ? 'Fermer' : 'Annuler'}</button>
+                  {!ro && (
+                    <button className="btn btn-primary" onClick={submitEdit} disabled={saving}>
+                      {saving ? 'Enregistrement…' : 'Enregistrer'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {mvArt && canDo('articles', 'add_movement') && (
         <div className="overlay" onClick={() => setMvArt(null)}>
           <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="card-head">
@@ -410,8 +431,9 @@ export default function Articles() {
                   <td className="mono muted">{num(a.produced)} {a.unite}</td>
                   <td className="mono muted">{num(a.shipped)} {a.unite}</td>
                   <td>
-                    <div className="flex gap" style={{ gap: 5 }}>
-                      {canDo('articles', 'edit') && <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(a)} title="Modifier"><Pencil size={13} /></button>}
+                    <div className="flex gap" style={{ gap: 5, alignItems: 'center' }}>
+                      <PhotoBadge photos={a.photos || []} onClick={() => openEdit(a)} />
+                      <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(a)} title={canDo('articles', 'edit') ? 'Modifier' : 'Consulter'}>{canDo('articles', 'edit') ? <Pencil size={13} /> : <Eye size={13} />}</button>
                       {canDo('articles', 'add_movement') && <button className="btn" style={{ padding: '5px 8px', color: 'var(--teal)' }} onClick={() => openMv(a)} title="Mouvement stock"><ArrowUpFromLine size={13} /></button>}
                       {canDo('articles', 'view_history') && <button className="btn" style={{ padding: '5px 8px', color: '#A78BFA' }} onClick={() => openHist(a)} title="Historique"><History size={13} /></button>}
                       {canDo('articles', 'delete') && <button className="btn" style={{ padding: '5px 8px', color: '#ef4444' }} onClick={() => deleteArticle(a)} title="Supprimer"><Trash2 size={13} /></button>}

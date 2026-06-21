@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
   AlertCircle, PackageCheck, Boxes, Wallet, TriangleAlert, History,
-  Pencil, Lock, X, ArrowDownToLine, ArrowUpFromLine, Plus, ArrowRightLeft,
+  Pencil, Eye, Lock, X, ArrowDownToLine, ArrowUpFromLine, Plus, ArrowRightLeft,
 } from 'lucide-react';
 import { api, dh, num } from '../App.jsx';
 import { Loading, Pill, KpiCard, FilterBar } from '../components/Common.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const MOTIFS = {
   Entrée: ['Réception fournisseur', 'Retour atelier', 'Ajustement inventaire', 'Régularisation'],
@@ -13,6 +14,7 @@ const MOTIFS = {
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function Parts() {
+  const { canDo } = useAuth();
   const [parts, setParts] = useState(null);
   const [recent, setRecent] = useState([]);
   const [editing, setEditing] = useState(null);   // pièce en cours de modif
@@ -61,9 +63,11 @@ export default function Parts() {
             <div className="card-title">Nomenclature des pièces de rechange</div>
             <span className="card-hint">Stock géré uniquement par mouvements (entrées / sorties)</span>
           </div>
-          <button className="btn btn-primary" style={{ gap: 8 }} onClick={() => setCreating(true)}>
-            <Plus size={16} /> Créer une pièce
-          </button>
+          {canDo('parts', 'create') && (
+            <button className="btn btn-primary" style={{ gap: 8 }} onClick={() => setCreating(true)}>
+              <Plus size={16} /> Créer une pièce
+            </button>
+          )}
         </div>
         <FilterBar
           filters={[
@@ -102,11 +106,13 @@ export default function Parts() {
                   </td>
                   <td>
                     <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
-                      <button className="link-btn" onClick={() => setStockFor(p)}>
-                        <ArrowRightLeft size={15} /> Mouvements
-                      </button>
-                      <button className="icon-btn" title="Modifier la fiche" onClick={() => setEditing(p)}>
-                        <Pencil size={15} />
+                      {canDo('parts', 'add_movement') && (
+                        <button className="link-btn" onClick={() => setStockFor(p)}>
+                          <ArrowRightLeft size={15} /> Mouvements
+                        </button>
+                      )}
+                      <button className="icon-btn" title={canDo('parts', 'edit') ? 'Modifier la fiche' : 'Consulter la fiche'} onClick={() => setEditing(p)}>
+                        {canDo('parts', 'edit') ? <Pencil size={15} /> : <Eye size={15} />}
                       </button>
                     </div>
                   </td>
@@ -160,15 +166,15 @@ export default function Parts() {
         </div>
       </div>
 
-      {creating && (
+      {creating && canDo('parts', 'create') && (
         <CreatePartModal onClose={() => setCreating(false)}
           onSaved={() => { setCreating(false); load(); }} />
       )}
       {editing && (
-        <EditPartModal part={editing} onClose={() => setEditing(null)}
+        <EditPartModal part={editing} readOnly={!canDo('parts', 'edit')} onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load(); }} />
       )}
-      {stockFor && (
+      {stockFor && canDo('parts', 'add_movement') && (
         <StockDrawer part={stockFor} onClose={() => setStockFor(null)} onChanged={load} />
       )}
     </div>
@@ -269,7 +275,7 @@ function CreatePartModal({ onClose, onSaved }) {
 }
 
 /* ---------- Modal modification fiche (SANS champ stock) ---------- */
-function EditPartModal({ part, onClose, onSaved }) {
+function EditPartModal({ part, readOnly, onClose, onSaved }) {
   const [f, setF] = useState({
     name: part.name, category: part.category, price: part.price,
     unit: part.unit, stockMin: part.stockMin,
@@ -290,7 +296,7 @@ function EditPartModal({ part, onClose, onSaved }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <h3>Modifier la fiche pièce</h3>
+            <h3>{readOnly ? 'Consulter' : 'Modifier'} la fiche pièce</h3>
             <div className="sub">{part.ref}</div>
           </div>
           <button className="icon-btn" onClick={onClose}><X size={16} /></button>
@@ -298,19 +304,19 @@ function EditPartModal({ part, onClose, onSaved }) {
         <div className="modal-body">
           <div className="field">
             <label>Désignation</label>
-            <input className="input" value={f.name} onChange={set('name')} />
+            <input className="input" value={f.name} onChange={set('name')} disabled={readOnly} />
           </div>
           <div className="row-2">
             <div className="field">
               <label>Catégorie</label>
-              <select className="select" value={f.category} onChange={set('category')}>
+              <select className="select" value={f.category} onChange={set('category')} disabled={readOnly}>
                 {['Mécanique', 'Transmission', 'Outillage', 'Consommable', 'Lubrifiant',
                   'Hydraulique', 'Électrique', 'Instrumentation'].map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div className="field">
               <label>Unité</label>
-              <select className="select" value={f.unit} onChange={set('unit')}>
+              <select className="select" value={f.unit} onChange={set('unit')} disabled={readOnly}>
                 {['pc', 'kit', 'L', 'kg', 'm'].map((u) => <option key={u}>{u}</option>)}
               </select>
             </div>
@@ -318,15 +324,13 @@ function EditPartModal({ part, onClose, onSaved }) {
           <div className="row-2">
             <div className="field">
               <label>Prix unitaire (DH)</label>
-              <input className="input mono" type="number" min="0" value={f.price} onChange={set('price')} />
+              <input className="input mono" type="number" min="0" value={f.price} onChange={set('price')} disabled={readOnly} />
             </div>
             <div className="field">
               <label>Seuil minimum ({f.unit})</label>
-              <input className="input mono" type="number" min="0" value={f.stockMin} onChange={set('stockMin')} />
+              <input className="input mono" type="number" min="0" value={f.stockMin} onChange={set('stockMin')} disabled={readOnly} />
             </div>
           </div>
-
-          {/* Stock NON modifiable ici */}
           <label style={{ fontSize: 12.5, color: 'var(--text-dim)', display: 'block', marginBottom: 7, fontWeight: 500 }}>
             Stock courant
           </label>
@@ -334,16 +338,20 @@ function EditPartModal({ part, onClose, onSaved }) {
             <span className="lv">{part.stock} {part.unit}</span>
             <Lock size={15} color="var(--text-muted)" />
           </div>
-          <div className="lock-note">
-            <Lock size={13} />
-            Le stock ne se modifie pas ici — utilisez « Mouvements » (entrée / sortie) pour le faire évoluer de façon tracée.
-          </div>
+          {!readOnly && (
+            <div className="lock-note">
+              <Lock size={13} />
+              Le stock ne se modifie pas ici — utilisez « Mouvements » (entrée / sortie) pour le faire évoluer de façon tracée.
+            </div>
+          )}
         </div>
         <div className="modal-foot">
-          <button className="btn" onClick={onClose}>Annuler</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
+          <button className="btn" onClick={onClose}>{readOnly ? 'Fermer' : 'Annuler'}</button>
+          {!readOnly && (
+            <button className="btn btn-primary" onClick={save} disabled={saving}>
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          )}
         </div>
       </div>
     </div>

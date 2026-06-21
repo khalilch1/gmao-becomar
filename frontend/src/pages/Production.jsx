@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, Calculator, Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, X, Calculator, Pencil, Eye, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { api, dh, num } from '../App.jsx';
 import { Loading, Pill, useFetch, KpiSimple as KpiCard, FilterBar } from '../components/Common.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const MACHINES = [
   'DEB-SCI-01', 'DEB-SCI-02', 'PRE-HOT-01', 'PRE-COL-01',
@@ -51,7 +52,7 @@ const EMPTY_FORM = {
   observations: '',
 };
 
-function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, onSubmit, saving, title }) {
+function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, onSubmit, saving, title, readOnly }) {
   const trs = calcTRSLocal(form);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -80,12 +81,12 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
         </div>
         <div className="row-2">
           <div className="field"><label>Machine</label>
-            <select className="select" value={form.machine} onChange={set('machine')}>
+            <select className="select" value={form.machine} onChange={set('machine')} disabled={readOnly}>
               {MACHINES.map((m) => <option key={m}>{m}</option>)}
             </select>
           </div>
           <div className="field"><label>Conducteur</label>
-            <select className="select" value={form.conducteur} onChange={set('conducteur')}>
+            <select className="select" value={form.conducteur} onChange={set('conducteur')} disabled={readOnly}>
               <option value="">— Sélectionner —</option>
               {collabs.map((c) => <option key={c.id} value={c.id}>{c.prenom} {c.nom}</option>)}
             </select>
@@ -93,12 +94,12 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
         </div>
         <div className="row-2">
           <div className="field"><label>Date de production</label>
-            <input className="input" type="date" value={form.date} onChange={set('date')} /></div>
+            <input className="input" type="date" value={form.date} onChange={set('date')} disabled={readOnly} /></div>
           <div className="row-2">
             <div className="field"><label>Début shift</label>
-              <input className="input mono" type="time" value={form.shift_debut} onChange={set('shift_debut')} /></div>
+              <input className="input mono" type="time" value={form.shift_debut} onChange={set('shift_debut')} disabled={readOnly} /></div>
             <div className="field"><label>Fin shift</label>
-              <input className="input mono" type="time" value={form.shift_fin} onChange={set('shift_fin')} /></div>
+              <input className="input mono" type="time" value={form.shift_fin} onChange={set('shift_fin')} disabled={readOnly} /></div>
           </div>
         </div>
       </div>
@@ -107,7 +108,7 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
           <span className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Articles produits</span>
-          <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={addArt}><Plus size={13} /> Ajouter</button>
+          {!readOnly && <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={addArt}><Plus size={13} /> Ajouter</button>}
         </div>
         {form.articles_produits.map((a, i) => {
           const artInfo = articles.find((x) => x.ref === a.ref);
@@ -115,7 +116,7 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
               <div className="field" style={{ flex: 3, marginBottom: 0 }}>
                 {i === 0 && <label>Article</label>}
-                <select className="select" value={a.ref} onChange={(e) => setArt(i, 'ref', e.target.value)}>
+                <select className="select" value={a.ref} onChange={(e) => setArt(i, 'ref', e.target.value)} disabled={readOnly}>
                   <option value="">— Sélectionner un article —</option>
                   {articles.map((x) => <option key={x.ref} value={x.ref}>{x.designation} ({x.unite})</option>)}
                 </select>
@@ -123,12 +124,12 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
               <div className="field" style={{ flex: 1, marginBottom: 0 }}>
                 {i === 0 && <label>Quantité</label>}
                 <input className="input mono" type="number" min="0" step="1" value={a.qte}
-                  onChange={(e) => setArt(i, 'qte', e.target.value)} />
+                  onChange={(e) => setArt(i, 'qte', e.target.value)} disabled={readOnly} />
               </div>
               {artInfo && <div style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 90, paddingBottom: 8 }}>
                 {dh(artInfo.cout_unitaire * Number(a.qte || 0))}
               </div>}
-              {form.articles_produits.length > 1 && (
+              {!readOnly && form.articles_produits.length > 1 && (
                 <button className="btn" style={{ padding: '8px', marginBottom: 1 }} onClick={() => removeArt(i)}>
                   <X size={13} />
                 </button>
@@ -147,7 +148,7 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
           <span className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Matières premières consommées</span>
-          <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={addMat}><Plus size={13} /> Ajouter</button>
+          {!readOnly && <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={addMat}><Plus size={13} /> Ajouter</button>}
         </div>
         {form.matieres_consommees.map((m, i) => {
           const matInfo = matieres.find((x) => x.ref === m.ref);
@@ -155,7 +156,7 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
               <div className="field" style={{ flex: 3, marginBottom: 0 }}>
                 {i === 0 && <label>Matière première</label>}
-                <select className="select" value={m.ref} onChange={(e) => setMat(i, 'ref', e.target.value)}>
+                <select className="select" value={m.ref} onChange={(e) => setMat(i, 'ref', e.target.value)} disabled={readOnly}>
                   <option value="">— Sélectionner une matière —</option>
                   {matieres.map((x) => <option key={x.ref} value={x.ref}>{x.designation} — stock: {num(+(x.stock||0).toFixed(1))} {x.unite}</option>)}
                 </select>
@@ -163,12 +164,12 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
               <div className="field" style={{ flex: 1, marginBottom: 0 }}>
                 {i === 0 && <label>Quantité</label>}
                 <input className="input mono" type="number" min="0" step="0.1" value={m.qte}
-                  onChange={(e) => setMat(i, 'qte', e.target.value)} />
+                  onChange={(e) => setMat(i, 'qte', e.target.value)} disabled={readOnly} />
               </div>
               {matInfo && <div style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 90, paddingBottom: 8 }}>
                 {dh(matInfo.cout_unitaire * Number(m.qte || 0))}
               </div>}
-              {form.matieres_consommees.length > 1 && (
+              {!readOnly && form.matieres_consommees.length > 1 && (
                 <button className="btn" style={{ padding: '8px', marginBottom: 1 }} onClick={() => removeMat(i)}>
                   <X size={13} />
                 </button>
@@ -190,14 +191,13 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
         </div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
           <div className="field" style={{ flex: 1, minWidth: 160 }}><label>Temps d'arrêt (h)</label>
-            <input className="input mono" type="number" min="0" step="0.5" value={form.temps_arret} onChange={set('temps_arret')} /></div>
+            <input className="input mono" type="number" min="0" step="0.5" value={form.temps_arret} onChange={set('temps_arret')} disabled={readOnly} /></div>
           <div className="field" style={{ flex: 1, minWidth: 160 }}><label>Production théorique</label>
-            <input className="input mono" type="number" min="0" value={form.production_theorique} onChange={set('production_theorique')} /></div>
+            <input className="input mono" type="number" min="0" value={form.production_theorique} onChange={set('production_theorique')} disabled={readOnly} /></div>
           <div className="field" style={{ flex: 1, minWidth: 160 }}><label>Production conforme</label>
-            <input className="input mono" type="number" min="0" value={form.production_conforme} onChange={set('production_conforme')} placeholder="= prod. réelle si vide" /></div>
+            <input className="input mono" type="number" min="0" value={form.production_conforme} onChange={set('production_conforme')} placeholder="= prod. réelle si vide" disabled={readOnly} /></div>
         </div>
 
-        {/* TRS preview */}
         <div style={{ background: 'var(--surface-3)', borderRadius: 'var(--radius)', padding: '14px 20px', display: 'flex', gap: 24, justifyContent: 'space-around', alignItems: 'center' }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 4 }}>Durée shift</div>
@@ -219,19 +219,22 @@ function ProductionForm({ form, setForm, articles, matieres, collabs, onCancel, 
       </div>
 
       <div className="field"><label>Observations</label>
-        <input className="input" value={form.observations} onChange={set('observations')} placeholder="Remarques, incidents, qualité..." /></div>
+        <input className="input" value={form.observations} onChange={set('observations')} placeholder="Remarques, incidents, qualité..." disabled={readOnly} /></div>
 
       <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
-        <button className="btn" onClick={onCancel}>Annuler</button>
-        <button className="btn btn-primary" onClick={onSubmit} disabled={saving}>
-          <Calculator size={16} /> {saving ? 'Enregistrement…' : 'Enregistrer & calculer TRS'}
-        </button>
+        <button className="btn" onClick={onCancel}>{readOnly ? 'Fermer' : 'Annuler'}</button>
+        {!readOnly && (
+          <button className="btn btn-primary" onClick={onSubmit} disabled={saving}>
+            <Calculator size={16} /> {saving ? 'Enregistrement…' : 'Enregistrer & calculer TRS'}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
 export default function Production() {
+  const { canDo } = useAuth();
   const [reload, setReload] = useState(0);
   const { data } = useFetch(api.productions, [reload]);
   const [articles, setArticles] = useState([]);
@@ -339,9 +342,11 @@ export default function Production() {
         <p className="muted" style={{ fontSize: 13.5, maxWidth: 620 }}>
           Saisie des <b style={{ color: 'var(--text)' }}>sessions de production</b>. Le TRS est calculé automatiquement. Chaque production met à jour les stocks articles et matières premières.
         </p>
-        <button className="btn btn-primary" onClick={() => { setOpen(true); setForm(EMPTY_FORM); }}>
-          <Plus size={17} /> Nouvelle saisie
-        </button>
+        {canDo('production', 'create') && (
+          <button className="btn btn-primary" onClick={() => { setOpen(true); setForm(EMPTY_FORM); }}>
+            <Plus size={17} /> Nouvelle saisie
+          </button>
+        )}
       </div>
 
       {/* KPIs */}
@@ -353,7 +358,7 @@ export default function Production() {
       </div>
 
       {/* Modal création */}
-      {open && (
+      {open && canDo('production', 'create') && (
         <div className="overlay" onClick={() => setOpen(false)}>
           <div style={{ margin: 'auto', width: '100%', maxWidth: 720, maxHeight: '95vh', overflowY: 'auto', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
             onClick={(e) => e.stopPropagation()}>
@@ -367,7 +372,7 @@ export default function Production() {
         </div>
       )}
 
-      {/* Modal modification */}
+      {/* Modal modification / consultation */}
       {editProd && (
         <div className="overlay" onClick={() => setEditProd(null)}>
           <div style={{ margin: 'auto', width: '100%', maxWidth: 720, maxHeight: '95vh', overflowY: 'auto', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
@@ -376,7 +381,8 @@ export default function Production() {
               form={editForm} setForm={setEditForm}
               articles={articles} matieres={matieres} collabs={collabs}
               onCancel={() => setEditProd(null)} onSubmit={submitEdit} saving={editSaving}
-              title={`Modifier ${editProd.id}`}
+              title={canDo('production', 'edit') ? `Modifier ${editProd.id}` : `Consulter ${editProd.id}`}
+              readOnly={!canDo('production', 'edit')}
             />
           </div>
         </div>
@@ -426,8 +432,12 @@ export default function Production() {
                     <td className="mono" style={{ color: '#fbbf24' }}>{dh(p.cout_matieres)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap" style={{ gap: 4 }}>
-                        <button className="btn" style={{ padding: '5px 7px' }} onClick={() => openEdit(p)} title="Modifier"><Pencil size={13} /></button>
-                        <button className="btn" style={{ padding: '5px 7px', color: '#ef4444' }} onClick={() => deleteProd(p)} title="Supprimer"><Trash2 size={13} /></button>
+                        <button className="btn" style={{ padding: '5px 7px' }} onClick={() => openEdit(p)} title={canDo('production', 'edit') ? 'Modifier' : 'Consulter'}>
+                          {canDo('production', 'edit') ? <Pencil size={13} /> : <Eye size={13} />}
+                        </button>
+                        {canDo('production', 'delete') && (
+                          <button className="btn" style={{ padding: '5px 7px', color: '#ef4444' }} onClick={() => deleteProd(p)} title="Supprimer"><Trash2 size={13} /></button>
+                        )}
                         <button className="btn" style={{ padding: '5px 7px' }} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
                           {expanded === p.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                         </button>

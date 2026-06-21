@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, Calculator, Pencil, Package, Users } from 'lucide-react';
+import { Plus, X, Calculator, Pencil, Eye, Package, Users } from 'lucide-react';
 import { api, dh } from '../App.jsx';
 import {
   Loading, Pill, useFetch, statusTone, typeTone, priorityTone, FilterBar,
 } from '../components/Common.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const MACHINES = [
   'DEB-SCI-01', 'DEB-SCI-02', 'PRE-HOT-01', 'PRE-COL-01',
@@ -62,6 +63,7 @@ function CollabSelect({ collaborateurs, value, onChange }) {
 }
 
 export default function WorkOrders() {
+  const { canDo } = useAuth();
   const [reload, setReload] = useState(0);
   const { data } = useFetch(api.workorders, [reload]);
   const [collabs, setCollabs] = useState([]);
@@ -168,13 +170,15 @@ export default function WorkOrders() {
           Chaque ordre de travail est <b style={{ color: 'var(--text)' }}>valorisé automatiquement</b> :
           main d'œuvre (heures × taux) + pièces (nomenclature) + coût d'arrêt (heures × coût horaire machine).
         </p>
-        <button className="btn btn-primary" onClick={() => setOpen(true)}>
-          <Plus size={17} /> Nouvel OT
-        </button>
+        {canDo('workorders', 'create') && (
+          <button className="btn btn-primary" onClick={() => setOpen(true)}>
+            <Plus size={17} /> Nouvel OT
+          </button>
+        )}
       </div>
 
       {/* Formulaire création */}
-      {open && (
+      {open && canDo('workorders', 'create') && (
         <div className="card" style={{ marginBottom: 18, borderColor: 'var(--accent)' }}>
           <div className="card-head">
             <div className="card-title">Créer un ordre de travail</div>
@@ -231,89 +235,94 @@ export default function WorkOrders() {
         </div>
       )}
 
-      {/* Modal modification OT */}
-      {editOt && (
-        <div className="overlay" onClick={() => setEditOt(null)}>
-          <div className="modal" style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto' }}
-            onClick={(e) => e.stopPropagation()}>
-            <div className="card-head" style={{ position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>
-              <div className="card-title">Modifier {editOt.id}</div>
-              <button className="btn" onClick={() => setEditOt(null)} style={{ padding: '7px 10px' }}><X size={16} /></button>
-            </div>
-            <div style={{ padding: '0 22px 22px' }}>
-              <div className="row-2" style={{ marginTop: 16 }}>
-                <div className="field">
-                  <label>Machine</label>
-                  <select className="select" value={editForm.machine} onChange={setE('machine')}>
-                    {MACHINES.map((m) => <option key={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Statut</label>
-                  <select className="select" value={editForm.status} onChange={setE('status')}>
-                    <option>Planifié</option><option>En cours</option><option>Clôturé</option>
-                  </select>
-                </div>
+      {/* Modal modification / consultation OT */}
+      {editOt && (() => {
+        const ro = !canDo('workorders', 'edit');
+        return (
+          <div className="overlay" onClick={() => setEditOt(null)}>
+            <div className="modal" style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto' }}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="card-head" style={{ position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>
+                <div className="card-title">{ro ? 'Consulter' : 'Modifier'} {editOt.id}</div>
+                <button className="btn" onClick={() => setEditOt(null)} style={{ padding: '7px 10px' }}><X size={16} /></button>
               </div>
-              <div className="row-2">
-                <div className="field">
-                  <label>Type</label>
-                  <select className="select" value={editForm.type} onChange={setE('type')}>
-                    <option>Corrective</option><option>Préventive</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Priorité</label>
-                  <select className="select" value={editForm.priority} onChange={setE('priority')}>
-                    <option>Urgente</option><option>Normale</option><option>Faible</option>
-                  </select>
-                </div>
-              </div>
-              <CollabSelect
-                collaborateurs={collabs}
-                value={editForm.collaborateurs || []}
-                onChange={(v) => setEditForm((f) => ({ ...f, collaborateurs: v }))}
-              />
-              <div className="field">
-                <label>Description de l'intervention</label>
-                <input className="input" value={editForm.desc} onChange={setE('desc')} />
-              </div>
-              <div className="row-2">
-                <div className="field">
-                  <label>Heures main d'œuvre</label>
-                  <input className="input mono" type="number" step="0.5"
-                    value={editForm.laborHours} onChange={setE('laborHours')} />
-                </div>
-                <div className="field">
-                  <label>Heures d'arrêt production</label>
-                  <input className="input mono" type="number" step="0.5"
-                    value={editForm.downtimeHours} onChange={setE('downtimeHours')} />
-                </div>
-              </div>
-              {/* Pièces déjà sur cet OT (lecture seule ici) */}
-              {editOt.partsDetail && editOt.partsDetail.length > 0 && (
-                <div className="field">
-                  <label>Pièces consommées (ajoutées par le magasinier)</label>
-                  <div style={{ background: 'var(--surface-3)', borderRadius: 'var(--radius)', padding: '8px 12px' }}>
-                    {editOt.partsDetail.map((p) => (
-                      <div key={p.ref} className="flex between" style={{ fontSize: 13, padding: '3px 0' }}>
-                        <span>{p.name}</span>
-                        <span className="mono muted">{p.qty} × {p.unitPrice} DH = <b>{dh(p.total)}</b></span>
-                      </div>
-                    ))}
+              <div style={{ padding: '0 22px 22px' }}>
+                <div className="row-2" style={{ marginTop: 16 }}>
+                  <div className="field">
+                    <label>Machine</label>
+                    <select className="select" value={editForm.machine} onChange={setE('machine')} disabled={ro}>
+                      {MACHINES.map((m) => <option key={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Statut</label>
+                    <select className="select" value={editForm.status} onChange={setE('status')} disabled={ro}>
+                      <option>Planifié</option><option>En cours</option><option>Clôturé</option>
+                    </select>
                   </div>
                 </div>
-              )}
-              <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-                <button className="btn" onClick={() => setEditOt(null)}>Annuler</button>
-                <button className="btn btn-primary" onClick={submitEdit} disabled={editSaving}>
-                  <Calculator size={16} /> {editSaving ? 'Calcul…' : 'Enregistrer & revalorise'}
-                </button>
+                <div className="row-2">
+                  <div className="field">
+                    <label>Type</label>
+                    <select className="select" value={editForm.type} onChange={setE('type')} disabled={ro}>
+                      <option>Corrective</option><option>Préventive</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Priorité</label>
+                    <select className="select" value={editForm.priority} onChange={setE('priority')} disabled={ro}>
+                      <option>Urgente</option><option>Normale</option><option>Faible</option>
+                    </select>
+                  </div>
+                </div>
+                <CollabSelect
+                  collaborateurs={collabs}
+                  value={editForm.collaborateurs || []}
+                  onChange={(v) => !ro && setEditForm((f) => ({ ...f, collaborateurs: v }))}
+                  readOnly={ro}
+                />
+                <div className="field">
+                  <label>Description de l'intervention</label>
+                  <input className="input" value={editForm.desc} onChange={setE('desc')} disabled={ro} />
+                </div>
+                <div className="row-2">
+                  <div className="field">
+                    <label>Heures main d'œuvre</label>
+                    <input className="input mono" type="number" step="0.5"
+                      value={editForm.laborHours} onChange={setE('laborHours')} disabled={ro} />
+                  </div>
+                  <div className="field">
+                    <label>Heures d'arrêt production</label>
+                    <input className="input mono" type="number" step="0.5"
+                      value={editForm.downtimeHours} onChange={setE('downtimeHours')} disabled={ro} />
+                  </div>
+                </div>
+                {editOt.partsDetail && editOt.partsDetail.length > 0 && (
+                  <div className="field">
+                    <label>Pièces consommées (ajoutées par le magasinier)</label>
+                    <div style={{ background: 'var(--surface-3)', borderRadius: 'var(--radius)', padding: '8px 12px' }}>
+                      {editOt.partsDetail.map((p) => (
+                        <div key={p.ref} className="flex between" style={{ fontSize: 13, padding: '3px 0' }}>
+                          <span>{p.name}</span>
+                          <span className="mono muted">{p.qty} × {p.unitPrice} DH = <b>{dh(p.total)}</b></span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+                  <button className="btn" onClick={() => setEditOt(null)}>{ro ? 'Fermer' : 'Annuler'}</button>
+                  {!ro && (
+                    <button className="btn btn-primary" onClick={submitEdit} disabled={editSaving}>
+                      <Calculator size={16} /> {editSaving ? 'Calcul…' : 'Enregistrer & revaloriser'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal ajout pièces (magasinier) — sélection multiple */}
       {partsOt && (() => {
@@ -515,11 +524,15 @@ export default function WorkOrders() {
                   <td>
                     <div className="flex gap" style={{ gap: 4 }}>
                       <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(o)}
-                        title="Modifier cet OT"><Pencil size={14} /></button>
-                      <button className="btn" style={{ padding: '5px 8px', color: 'var(--teal)' }}
-                        onClick={() => openParts(o)} title="Ajouter pièces consommées (magasinier)">
-                        <Package size={14} />
+                        title={canDo('workorders', 'edit') ? 'Modifier cet OT' : 'Consulter cet OT'}>
+                        {canDo('workorders', 'edit') ? <Pencil size={14} /> : <Eye size={14} />}
                       </button>
+                      {canDo('workorders', 'add_parts') && (
+                        <button className="btn" style={{ padding: '5px 8px', color: 'var(--teal)' }}
+                          onClick={() => openParts(o)} title="Ajouter pièces consommées (magasinier)">
+                          <Package size={14} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

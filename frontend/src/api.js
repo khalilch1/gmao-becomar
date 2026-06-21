@@ -67,6 +67,11 @@ export const api = {
   deleteArticle: (ref) => del(`/articles/${ref}`),
   articleMovements: (ref) => get(`/articles/${ref}/movements`),
   addArticleMovement: (ref, data) => post(`/articles/${ref}/movement`, data),
+  uploadArticlePhoto: (ref, file) => {
+    const fd = new FormData(); fd.append('photo', file);
+    return fetch(`${BASE}/articles/${ref}/photos`, { method: 'POST', headers: authHeaders(), body: fd }).then((r) => r.json());
+  },
+  deleteArticlePhoto: (ref, filename) => del(`/articles/${ref}/photos/${filename}`),
   // Matières premières
   matieres: () => get('/matieres'),
   createMatiere: (data) => post('/matieres', data),
@@ -74,6 +79,11 @@ export const api = {
   deleteMatiere: (ref) => del(`/matieres/${ref}`),
   matiereMovements: (ref) => get(`/matieres/${ref}/movements`),
   addMatiereMovement: (ref, data) => post(`/matieres/${ref}/movement`, data),
+  uploadMatierePhoto: (ref, file) => {
+    const fd = new FormData(); fd.append('photo', file);
+    return fetch(`${BASE}/matieres/${ref}/photos`, { method: 'POST', headers: authHeaders(), body: fd }).then((r) => r.json());
+  },
+  deleteMatierePhoto: (ref, filename) => del(`/matieres/${ref}/photos/${filename}`),
   // Productions
   productions: () => get('/productions'),
   createProduction: (data) => post('/productions', data),

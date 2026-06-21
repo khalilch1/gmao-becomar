@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Pencil, Trash2, Users, Settings } from 'lucide-react';
+import { Plus, X, Pencil, Eye, Trash2, Users, Settings } from 'lucide-react';
 import { api } from '../App.jsx';
 import { Loading, useFetch, FilterBar } from '../components/Common.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -201,45 +201,50 @@ export default function Collaborateurs() {
         </div>
       )}
 
-      {editing && (
-        <div className="overlay" onClick={() => setEditing(null)}>
-          <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-            <div className="card-head">
-              <div className="card-title">Modifier — {editing.prenom} {editing.nom}</div>
-              <button className="btn" onClick={() => setEditing(null)} style={{ padding: '7px 10px' }}><X size={16} /></button>
-            </div>
-            {err && <div className="banner banner-error" style={{ margin: '0 22px' }}>{err}</div>}
-            <div style={{ padding: '16px 22px' }}>
-              <div className="row-2">
-                <div className="field"><label>Prénom</label>
-                  <input className="input" value={editForm.prenom} onChange={setE('prenom')} /></div>
-                <div className="field"><label>Nom</label>
-                  <input className="input" value={editForm.nom} onChange={setE('nom')} /></div>
+      {editing && (() => {
+        const ro = !canDo('collaborateurs', 'edit');
+        return (
+          <div className="overlay" onClick={() => setEditing(null)}>
+            <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+              <div className="card-head">
+                <div className="card-title">{ro ? 'Consulter' : 'Modifier'} — {editing.prenom} {editing.nom}</div>
+                <button className="btn" onClick={() => setEditing(null)} style={{ padding: '7px 10px' }}><X size={16} /></button>
               </div>
-              <div className="row-2">
-                <div className="field"><label>Matricule</label>
-                  <input className="input mono" value={editForm.matricule || ''} onChange={setE('matricule')} /></div>
-                <div className="field"><label>Département</label>
-                  <select className="select" value={editForm.departement || ''} onChange={setE('departement')}>
-                    {departements.map((d) => <option key={d}>{d}</option>)}
+              {err && <div className="banner banner-error" style={{ margin: '0 22px' }}>{err}</div>}
+              <div style={{ padding: '16px 22px' }}>
+                <div className="row-2">
+                  <div className="field"><label>Prénom</label>
+                    <input className="input" value={editForm.prenom} onChange={setE('prenom')} disabled={ro} /></div>
+                  <div className="field"><label>Nom</label>
+                    <input className="input" value={editForm.nom} onChange={setE('nom')} disabled={ro} /></div>
+                </div>
+                <div className="row-2">
+                  <div className="field"><label>Matricule</label>
+                    <input className="input mono" value={editForm.matricule || ''} onChange={setE('matricule')} disabled={ro} /></div>
+                  <div className="field"><label>Département</label>
+                    <select className="select" value={editForm.departement || ''} onChange={setE('departement')} disabled={ro}>
+                      {departements.map((d) => <option key={d}>{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="field" style={{ maxWidth: '50%' }}><label>Fonction</label>
+                  <select className="select" value={editForm.fonction || ''} onChange={setE('fonction')} disabled={ro}>
+                    {fonctions.map((f) => <option key={f}>{f}</option>)}
                   </select>
                 </div>
-              </div>
-              <div className="field" style={{ maxWidth: '50%' }}><label>Fonction</label>
-                <select className="select" value={editForm.fonction || ''} onChange={setE('fonction')}>
-                  {fonctions.map((f) => <option key={f}>{f}</option>)}
-                </select>
-              </div>
-              <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
-                <button className="btn" onClick={() => setEditing(null)}>Annuler</button>
-                <button className="btn btn-primary" onClick={submitEdit} disabled={saving}>
-                  {saving ? 'Enregistrement…' : 'Enregistrer'}
-                </button>
+                <div className="flex gap" style={{ justifyContent: 'flex-end', marginTop: 6 }}>
+                  <button className="btn" onClick={() => setEditing(null)}>{ro ? 'Fermer' : 'Annuler'}</button>
+                  {!ro && (
+                    <button className="btn btn-primary" onClick={submitEdit} disabled={saving}>
+                      {saving ? 'Enregistrement…' : 'Enregistrer'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div className="card">
         <div className="card-head">
@@ -271,7 +276,7 @@ export default function Collaborateurs() {
                   <td>{c.fonction || '—'}</td>
                   <td>
                     <div className="flex gap" style={{ gap: 6 }}>
-                      {canDo('collaborateurs', 'edit') && <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(c)} title="Modifier"><Pencil size={14} /></button>}
+                      <button className="btn" style={{ padding: '5px 8px' }} onClick={() => openEdit(c)} title={canDo('collaborateurs', 'edit') ? 'Modifier' : 'Consulter'}>{canDo('collaborateurs', 'edit') ? <Pencil size={14} /> : <Eye size={14} />}</button>
                       {canDo('collaborateurs', 'delete') && <button className="btn" style={{ padding: '5px 8px', color: '#ef4444' }} onClick={() => remove(c)} title="Supprimer"><Trash2 size={14} /></button>}
                     </div>
                   </td>
